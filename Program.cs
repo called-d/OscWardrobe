@@ -29,7 +29,19 @@ Console.CancelKeyPress += (_sender, e) => {
     running = false;
     e.Cancel = true;
 };
+OSCQueryServiceProfile? vrchatClient = null;
+OSCQueryNode? avatarChangeNode = null;
 refreshTimer.Start();
+oscQuery.OnOscQueryServiceAdded += async (OSCQueryServiceProfile profile) => {
+    if (Equals(vrchatClient, profile)) return;
+    if (!profile.name.StartsWith("VRChat")) return;
+    vrchatClient = profile;
+    Console.WriteLine($"Found VRChat client: {profile.name} {profile.address}:{profile.port} {profile.GetServiceTypeString()}");
+    var tree = await Extensions.GetOSCTree(profile.address, profile.port);
+    avatarChangeNode = tree.GetNodeWithPath("/avatar/change");
+    Console.WriteLine($"avatarChangeNode.Value {avatarChangeNode.Value}");
+};
+oscQuery.AddEndpoint<string>("/avatar/change", Attributes.AccessValues.ReadWrite, null, "avatar change");
 while (running) {
     Thread.Sleep(500);
 }
