@@ -1,5 +1,4 @@
-﻿using System.Timers;
-using VRC.OSCQuery;
+﻿using VRC.OSCQuery;
 using Microsoft.Extensions.Logging;
 using ZLogger;
 
@@ -25,8 +24,16 @@ refreshTimer.Elapsed += (s,e) =>
 
 Console.WriteLine($"OSCQuery service running on port {oscQuery.TcpPort}");
 
-// Console.ReadKey();
+bool running = true;
+Console.CancelKeyPress += (_sender, e) => {
+    running = false;
+    e.Cancel = true;
+};
+refreshTimer.Start();
+while (running) {
+    Thread.Sleep(500);
+}
+refreshTimer.Stop();
 oscQuery.Dispose();
 
-refreshTimer.Start();
-System.Threading.Thread.Sleep(10_000);
+Console.WriteLine($"Gracefully shutting down OSCQuery service");
