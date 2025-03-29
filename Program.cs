@@ -1,4 +1,6 @@
-﻿using VRC.OSCQuery;
+﻿using BuildSoft.OscCore;
+using BlobHandles;
+using VRC.OSCQuery;
 using Microsoft.Extensions.Logging;
 using ZLogger;
 
@@ -8,14 +10,29 @@ using var factory = LoggerFactory.Create(logging => {
 });
 var logger = factory.CreateLogger<OSCQueryService>();
 logger.LogTrace("Hello, {Name}!", "World");
+var tcpPort = Extensions.GetAvailableTcpPort();
+var udpPort = Extensions.GetAvailableUdpPort();
 
 var oscQuery = new OSCQueryServiceBuilder()
     .WithDefaults()
-    .WithTcpPort(Extensions.GetAvailableTcpPort())
-    .WithUdpPort(Extensions.GetAvailableUdpPort())
+    .WithTcpPort(tcpPort)
+    .WithUdpPort(udpPort)
     .WithServiceName("OscWardrobe")
     .WithLogger(logger)
+    .StartHttpServer()
+    .AdvertiseOSC()
+    .AdvertiseOSCQuery()
     .Build();
+var receiver = OscServer.GetOrCreate(udpPort);
+receiver.AddMonitorCallback((address, values) => {
+    if (address.ToString() != "/avatar/change") return;
+    if (values.ElementCount != 1) return;
+    if (values.GetTypeTag(0) != TypeTag.String) return;
+    var avatar = values.ReadStringElement(0);
+    // TODO: なんか2連続で発火する
+    Console.WriteLine($"Received {address} {avatar}");
+});
+
 var refreshTimer = new System.Timers.Timer(5000);
 refreshTimer.Elapsed += (s,e) =>
 {
@@ -46,6 +63,7 @@ while (running) {
     Thread.Sleep(500);
 }
 refreshTimer.Stop();
+receiver.Dispose();
 oscQuery.Dispose();
 
 Console.WriteLine($"Gracefully shutting down OSCQuery service");
