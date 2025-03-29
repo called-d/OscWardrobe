@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BuildSoft.OscCore" Version="1.2.1.1" />
     <PackageReference Include="VRChat.OSCQuery" Version="0.0.7" />
     <PackageReference Include="ZLogger" Version="2.5.10" />
   </ItemGroup>
