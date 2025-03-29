@@ -7,4 +7,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="VRChat.OSCQuery" Version="0.0.7" />
+  </ItemGroup>
+
 </Project>
