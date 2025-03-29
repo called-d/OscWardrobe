@@ -1,5 +1,4 @@
 ﻿using BuildSoft.OscCore;
-using BlobHandles;
 using VRC.OSCQuery;
 using Microsoft.Extensions.Logging;
 using ZLogger;
@@ -48,19 +47,33 @@ Console.CancelKeyPress += (_sender, e) => {
 };
 OSCQueryServiceProfile? vrchatClient = null;
 OSCQueryNode? avatarChangeNode = null;
+OscClient? client = null;
 refreshTimer.Start();
 oscQuery.OnOscQueryServiceAdded += async (OSCQueryServiceProfile profile) => {
     if (Equals(vrchatClient, profile)) return;
     if (!profile.name.StartsWith("VRChat")) return;
     vrchatClient = profile;
+    var info = await Extensions.GetHostInfo(profile.address, profile.port);
+    client = new OscClient(info.oscIP, info.oscPort);
     Console.WriteLine($"Found VRChat client: {profile.name} {profile.address}:{profile.port} {profile.GetServiceTypeString()}");
     var tree = await Extensions.GetOSCTree(profile.address, profile.port);
     avatarChangeNode = tree.GetNodeWithPath("/avatar/change");
+
     Console.WriteLine($"avatarChangeNode.Value {avatarChangeNode.Value}");
 };
 oscQuery.AddEndpoint<string>("/avatar/change", Attributes.AccessValues.ReadWrite, null, "avatar change");
+int i = 30;
 while (running) {
     Thread.Sleep(500);
+    if (--i == 0) {
+        i = 30;
+        if (client != null) {
+            var avatar = "avtr_00000000-0000-4000-0000-000000000000";
+            Console.WriteLine($"Sending /avatar/change {avatar}");
+            client?.Send("/avatar/change", avatar);
+            // recently used, in your favorites, or uploaded by yourself?
+        }
+    }
 }
 refreshTimer.Stop();
 receiver.Dispose();
