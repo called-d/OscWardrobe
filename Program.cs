@@ -1,15 +1,21 @@
 ﻿using System.Timers;
 using VRC.OSCQuery;
 using Microsoft.Extensions.Logging;
+using ZLogger;
 
-// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+using var factory = LoggerFactory.Create(logging => {
+    logging.SetMinimumLevel(LogLevel.Trace);
+    logging.AddZLoggerConsole();
+});
+var logger = factory.CreateLogger<OSCQueryService>();
+logger.LogTrace("Hello, {Name}!", "World");
 
 var oscQuery = new OSCQueryServiceBuilder()
     .WithDefaults()
     .WithTcpPort(Extensions.GetAvailableTcpPort())
     .WithUdpPort(Extensions.GetAvailableUdpPort())
     .WithServiceName("OscWardrobe")
+    .WithLogger(logger)
     .Build();
 var refreshTimer = new System.Timers.Timer(5000);
 refreshTimer.Elapsed += (s,e) =>
