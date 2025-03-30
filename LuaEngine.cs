@@ -105,6 +105,9 @@ class LuaEngine {
             return 0;
         });
         lua_setglobal(L, "sleep");
+
+        // 削除した関数をメモリ上から追い出す（気休め）
+        lua_gc(L, LUA_GCCOLLECT, 0);
     }
 
     public LuaEngine () {
