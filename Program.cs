@@ -4,6 +4,7 @@ using System.Threading.Channels;
 var osc = new OscQueryServiceServiceAndClient();
 LuaEngine.OnSendFunctionCalled += (key, values) => osc.WrappedSend(key, values);
 var luaEngine = new LuaEngine();
+bool vrcIsReady = false;
 
 osc.MonitorCallbacks += (address, values) => {
     var address_ = address.ToString();
@@ -23,12 +24,18 @@ osc.MonitorCallbacks += (address, values) => {
     }
 };
 osc.OnUpdateAvatarParameterDefinitions += avatarParametersNode => {
+    if (!vrcIsReady) {
+        vrcIsReady = true;
+        luaEngine.Call("ready");
+    }
     var parameters = String.Join(",", avatarParametersNode.Contents.Select(
         kv => $"{kv.Key}: {string.Join(" ", kv.Value.Value?.Select(obj => obj?.ToString() ?? "null") ?? new string[] { "" })}"
     ));
     Console.WriteLine($"Found avatar parameters: {parameters}");
     // Console.WriteLine($"Found avatar parameters: {JsonConvert.SerializeObject(avatarParametersNode)}");
 };
+
+osc.Start();
 
 bool running = true;
 Console.CancelKeyPress += (_sender, e) => {
@@ -43,6 +50,7 @@ while (running) {
         i = 30;
         //
     }
+    luaEngine.Update();
 }
 luaEngine.Dispose();
 osc.Dispose();

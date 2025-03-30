@@ -6,7 +6,7 @@ using ZLogger;
 public class OscQueryServiceServiceAndClient {
     private readonly ILogger<OSCQueryService> _logger;
     private readonly OSCQueryService _queryService;
-    private readonly OscServer _receiver;
+    private OscServer? _receiver;
     private readonly System.Timers.Timer _refreshTimer;
     private OSCQueryServiceProfile? _vrchatClientQscQueryService = null;
     private OscClient? _client;
@@ -25,15 +25,11 @@ public class OscQueryServiceServiceAndClient {
         _logger.LogTrace("Hello, {Name}!", "World");
         TcpPort = Extensions.GetAvailableTcpPort();
         UdpPort = Extensions.GetAvailableUdpPort();
-
-        _receiver = OscServer.GetOrCreate(UdpPort);
-        Console.WriteLine($"receiver running on port {UdpPort}");
         _queryService = new OSCQueryServiceBuilder()
             .WithTcpPort(TcpPort)
             .WithUdpPort(UdpPort)
             .WithServiceName("OscWardrobe")
             .WithLogger(_logger)
-            .WithDefaults()
             .Build();
         _queryService.AddEndpoint<string>(
             "/avatar/change",
@@ -42,16 +38,29 @@ public class OscQueryServiceServiceAndClient {
             "avatar change"
         );
         _queryService.OnOscQueryServiceAdded += DetectVrcClientQueryService;
+        _refreshTimer = new System.Timers.Timer(10_000);
+    }
+    public void Start() {
+        _receiver = OscServer.GetOrCreate(UdpPort);
+        Console.WriteLine($"receiver running on port {UdpPort}");
+
+        _queryService.StartHttpServer();
+        Console.WriteLine($"queryService service running on port {TcpPort}");
+
+        _queryService.SetDiscovery(
+            new MeaModDiscovery(OSCQueryService.Logger)
+        );
+        _queryService.AdvertiseOSCQueryService(_queryService.ServerName, _queryService.TcpPort);
+        _queryService.AdvertiseOSCService(_queryService.ServerName, _queryService.OscPort);
 
         _queryService.RefreshServices();
-        _refreshTimer = new System.Timers.Timer(10_000);
+
         _refreshTimer.Elapsed += (_, _) => _queryService.RefreshServices();
         _refreshTimer.Start();
-        Console.WriteLine($"queryService service running on port {TcpPort}");
     }
     public event MonitorCallback MonitorCallbacks {
-        add => _receiver.AddMonitorCallback(value);
-        remove => _receiver.RemoveMonitorCallback(value);
+        add => _receiver?.AddMonitorCallback(value);
+        remove => _receiver?.RemoveMonitorCallback(value);
     }
     public Action<OSCQueryNode> OnUpdateAvatarParameterDefinitions = delegate { };
     private async void DetectVrcClientQueryService(OSCQueryServiceProfile profile) {
@@ -89,6 +98,6 @@ public class OscQueryServiceServiceAndClient {
     {
         _refreshTimer.Stop();
         _queryService.Dispose();
-        _receiver.Dispose();
+        _receiver?.Dispose();
     }
 }

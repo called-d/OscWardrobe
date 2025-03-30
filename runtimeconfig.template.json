@@ -1,0 +1,6 @@
+{
+    "configProperties": {
+        "//": "https://github.com/dotnet/runtime/issues/111242",
+        "System.Runtime.LegacyExceptionHandling": true
+    }
+}

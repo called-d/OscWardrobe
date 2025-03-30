@@ -19,6 +19,7 @@ class LuaEngine {
     lua_State T;
     private string? _error = null;
     public string? Error => _error;
+    private static Dictionary<lua_State, LuaCoroutine> Coroutines = new Dictionary<lua_State, LuaCoroutine>() {};
     public static Func<string, object[], string?> OnSendFunctionCalled = (_, _) => null;
 
     [UnmanagedCallersOnly]
@@ -48,72 +49,107 @@ class LuaEngine {
         return L.PushResult(OnSendFunctionCalled(lua_tostring(L, -2), args));
     }
 
-    unsafe public LuaEngine () {
-        L = luaL_newstate();
-        // FIXME: デバッグ用。きちんとサンドボックス化するなら消す必要あり
-        luaL_requiref(L, "", luaopen_base, 1); lua_pop(L, 1);
+    unsafe private void OpenLibs(lua_State L) {
+        // base 基本ライブラリ
+        luaL_requiref(L, LUA_GNAME, luaopen_base, 1); lua_pop(L, 1);
+
+        int type_ = lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
+        lua_pushstring(L, "dofile");
+        lua_pushnil(L);
+        lua_rawset(L, -3);
+        lua_pushstring(L, "loadfile");
+        lua_pushnil(L);
+        lua_rawset(L, -3);
+        lua_pop(L, 1); // pop global
+
+        // luaopen_package パッケージライブラリ
+        // luaL_requiref(L, LOADLIBNAME, luaopen_package, 1); lua_pop(L, 1);
+
+        // coroutine コルーチンライブラリ
         luaL_requiref(L, LUA_COLIBNAME, luaopen_coroutine, 1); lua_pop(L, 1);
+        // table: テーブルライブラリ
+        luaL_requiref(L, LUA_TABLIBNAME, luaopen_table, 1); lua_pop(L, 1);
+
+        // io: 入出力ライブラリ
+        // luaL_requiref(L, IOLIBNAME, luaopen_io, 1); lua_pop(L, 1);
+        // os: OSライブラリ
+        // luaL_requiref(L, OSLIBNAME, luaopen_os, 1); lua_pop(L, 1);
+
+        // string: 文字列ライブラリ
+        luaL_requiref(L, LUA_STRLIBNAME, luaopen_string, 1); lua_pop(L, 1);
+        // math: 数学ライブラリ
+        luaL_requiref(L, LUA_MATHLIBNAME, luaopen_math, 1); lua_pop(L, 1);
+        // utf8: UTF8ライブラリ
+        luaL_requiref(L, LUA_UTF8LIBNAME, luaopen_utf8, 1); lua_pop(L, 1);
+
+        // debug: デバッグライブラリ
+        // luaL_requiref(L, DBLIBNAME, luaopen_debug, 1); lua_pop(L, 1);
+
+        // osc
         luaL_newlib(L, new luaL_Reg[] {
             AsLuaLReg("send", &_callSend),
             AsLuaLReg(null, null)
         });
         lua_setglobal(L, "osc");
 
+        // sleep
+        lua_pushcfunction(L, static (L) => {
+            int nargs = lua_gettop(L);
+            double sleepSeconds = 0.0;
+            if (nargs > 0 && lua_type(L, 0) == LUA_TNUMBER) {
+                sleepSeconds = lua_tonumber(L, 0);
+            }
+            var c = LuaEngine.Coroutines[L];
+            c.SetSleep(sleepSeconds);
+            lua_yield(L, 1);
+            return 0;
+        });
+        lua_setglobal(L, "sleep");
+    }
+
+    public LuaEngine () {
+        L = luaL_newstate();
+        OpenLibs(L);
+
         var lua = """
-            function main()
-                print("lua 1")
-                print("yield", coroutine.yield(4, 5, 6))
-                print("lua 2")
-                return 1 + 2
+            local vrchat_is_ready = false
+            function ready()
+                vrchat_is_ready = true
             end
 
-            i = 1
+            function main()
+                while not vrchat_is_ready do
+                    sleep(0.5)
+                end
+                print("ready")
+
+                -- local success, err = osc.send("/avatar/change", "avtr_00000000-0000-4000-0000-000000000000")
+                -- if not success then
+                --     print("send error", err)
+                -- end
+            end
+
             function on_avatar_change(avatar)
                 print("avatar changed", avatar)
-                if i > 0 then
-                    i = i - 1
-                    -- local success, err = osc.send("/avatar/change", "avtr_00000000-0000-4000-0000-000000000000")
-                    -- if not success then
-                    --     print("send error", err)
-                    -- end
-                end
             end
         """;
 
-        T = lua_newthread(L);
+        var load = new LuaCoroutine(L);
+        Coroutines.Add(T = load.L, load);
         var status = luaL_loadstring(T, lua);
-        if (status == 0) lua_pcall(T, 0, 1, LUA_MULTRET);
-        if (lua_gettop(T) > 0)
-            Console.WriteLine(lua_tostring(T, -1));
-
+        if (status == 0) {
+            while (!load.IsEnd) load.Resume();
+            if (lua_gettop(T) > 0) Console.WriteLine(lua_tostring(T, -1));
+        }
         lua_getglobal(T, "main");
-        lua_State nullState = new lua_State();
-        if (lua_type(T, -1) != LUA_TFUNCTION) {
-            throw new Exception("main is not a function");
-        }
-        lua_KContext ctx = new lua_KContext();
-        int nres = 0;
-        var s = lua_resume(T, T, 0, ref nres);
-            Console.WriteLine($"stack size: {lua_gettop(T)}");
-            printState(s);
-        if (s == LUA_ERRRUN) {
-            Console.WriteLine(_error = lua_tostring(T, -1));
-            return;
-        } else {
-            if (s == LUA_YIELD) {
-                Console.WriteLine($"yielded {nres} results");
-                for (int i = 0; i < nres; i++) {
-                    Console.WriteLine(lua_tostring(T, -nres + i));
-                }
-                lua_pop(T, nres);
-                s = lua_resume(T, T, 0, ref nres);
-                Console.WriteLine($"stack size: {lua_gettop(T)}");
-                printState(s);
-            }
-        }
-        while (lua_gettop(T) > 0) {
-            Console.WriteLine(lua_tostring(L, -1));
+        if (lua_type(T, -1) == LUA_TFUNCTION) {
             lua_pop(T, 1);
+            var main = new LuaCoroutine(T, "main");
+            Coroutines.Add(main.L, main);
+            main.Resume();
+            RemoveEndCoroutines();
+        } else {
+            Console.WriteLine("main is not a function");
         }
     }
     public void OnReceiveAvatarChange(string avatar) {
@@ -127,36 +163,113 @@ class LuaEngine {
             Console.WriteLine(_error = lua_tostring(T, -1));
         }
     }
+    public void Call(string functionName) {
+        var c = new LuaCoroutine(L, functionName);
+        Coroutines.Add(c.L, c);
+        c.Resume();
+        RemoveEndCoroutines();
+    }
+    public void Update() {
+        foreach (var c in Coroutines.Values) {
+            if (c.IsSleeping && c.sleepUntil < System.DateTime.Now) {
+                c.sleepUntil = null;
+            }
+            if (!c.IsSleeping) c.Resume();
+        }
+        RemoveEndCoroutines();
+    }
 
     public void Dispose() {
         lua_close(L);
     }
 
-#region Debug
-    private void printState(int s) {
-        switch (s) {
-            case LUA_OK:
-                Console.WriteLine("LUA_OK");
-                break;
-            case LUA_YIELD:
-                Console.WriteLine("LUA_YIELD");
-                break;
-            case LUA_ERRRUN:
-                Console.WriteLine("LUA_ERRRUN");
-                break;
-            case LUA_ERRSYNTAX:
-                Console.WriteLine("LUA_ERRSYNTAX");
-                break;
-            case LUA_ERRMEM:
-                Console.WriteLine("LUA_ERRMEM");
-                break;
-            case LUA_ERRERR:
-                Console.WriteLine("LUA_ERRERR");
-                break;
-            default:
-                Console.WriteLine("unknown");
-                break;
+#region Coroutine
+    private class LuaCoroutine {
+        public lua_State L;
+        int nres = 0;
+        public bool IsEnd = false;
+        public System.DateTime? sleepUntil;
+        public bool IsSleeping => sleepUntil != null;
+        public void SetSleep(double seconds) { sleepUntil = System.DateTime.Now.AddSeconds(seconds); }
+
+        public LuaCoroutine(lua_State L) {
+            this.L = lua_newthread(L);
         }
+
+        public LuaCoroutine(lua_State L, string functionNameGlobal) {
+            this.L = lua_newthread(L);
+            lua_getglobal(this.L, functionNameGlobal);
+            if (lua_type(this.L, -1) != LUA_TFUNCTION) {
+                Console.WriteLine($"{functionNameGlobal} is not a function");
+                IsEnd = true;
+                return;
+            }
+        }
+        public int Resume() {
+            if (IsEnd) return 0;
+            var _s = lua_status(L);
+            if (!(_s == LUA_YIELD || _s == LUA_OK)) {
+                Console.WriteLine("invalid status:");
+                printState(_s);
+                IsEnd = true;
+                return 0;
+            }
+            var s = lua_resume(L, L, 0, ref nres);
+            Console.WriteLine($"stack size: {lua_gettop(L)}");
+            printState(s);
+            if (s == LUA_ERRRUN) {
+                Console.WriteLine(lua_tostring(L, -1));
+                IsEnd = true;
+                return s;
+            }
+            if (s == LUA_OK) {
+                while (lua_gettop(L) > 0) {
+                    Console.WriteLine(lua_tostring(L, -1));
+                    lua_pop(L, 1);
+                }
+                IsEnd = true;
+                return s;
+            }
+            if (s == LUA_YIELD) {
+                Console.WriteLine($"yielded {nres} results");
+                for (int i = 0; i < nres; i++) {
+                    Console.WriteLine(lua_tostring(L, -nres + i));
+                }
+                lua_pop(L, nres);
+                return s;
+            }
+            throw new Exception($"unknown state: s");
+        }
+
+        private void printState(int s) {
+            switch (s) {
+                case LUA_OK:
+                    Console.WriteLine("LUA_OK");
+                    break;
+                case LUA_YIELD:
+                    Console.WriteLine("LUA_YIELD");
+                    break;
+                case LUA_ERRRUN:
+                    Console.WriteLine("LUA_ERRRUN");
+                    break;
+                case LUA_ERRSYNTAX:
+                    Console.WriteLine("LUA_ERRSYNTAX");
+                    break;
+                case LUA_ERRMEM:
+                    Console.WriteLine("LUA_ERRMEM");
+                    break;
+                case LUA_ERRERR:
+                    Console.WriteLine("LUA_ERRERR");
+                    break;
+                default:
+                    Console.WriteLine("unknown");
+                    break;
+            }
+        }
+
+    }
+    private void RemoveEndCoroutines() {
+        Coroutines.Where(kv => kv.Value.IsEnd).Select(kv => kv.Key).ToList().ForEach(k => Coroutines.Remove(k));
     }
 #endregion
 }
