@@ -2,31 +2,34 @@ using System.Runtime.InteropServices;
 using LuaNET.Lua54;
 using static LuaNET.Lua54.Lua;
 
+static class LuaStateExtension {
+    public static int PushResult(this lua_State L, string? err) {
+        if (err != null) {
+            lua_pushnil(L);
+            lua_pushstring(L, err);
+            return 2;
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+}
+
 class LuaEngine {
     lua_State L;
     lua_State T;
     private string? _error = null;
     public string? Error => _error;
-    public static Action<string, object[]> OnSendFunctionCalled = delegate { };
+    public static Func<string, object[], string?> OnSendFunctionCalled = (_, _) => null;
 
     [UnmanagedCallersOnly]
     private static int _callSend(lua_State L) {
         int nargs = lua_gettop(L);
-        if (nargs == 0) {
-            lua_pushnil(L);
-            lua_pushstring(L, "no key");
-            return 2;
-        }
+        if (nargs == 0) return L.PushResult("no key");
         if (nargs == 1) {
-            OnSendFunctionCalled(lua_tostring(L, -1), new object[] { null });
-            lua_pushboolean(L, 1);
-            return 1;
+            return L.PushResult(OnSendFunctionCalled(lua_tostring(L, -1), new object[] { null }));
         }
-        if (nargs == 3) {
-            lua_pushnil(L);
-            lua_pushstring(L, "not implemented: send() takes 1 or 2 arguments");
-            return 2;
-        }
+        if (nargs == 3) return L.PushResult("not implemented: send() only takes 1 or 2 arguments");
+
         var args = new object[nargs - 1];
         switch (lua_type(L, -1)) {
             case LUA_TBOOLEAN:
@@ -42,9 +45,7 @@ class LuaEngine {
                 args[0] = null;
                 break;
         }
-        OnSendFunctionCalled(lua_tostring(L, -2), args);
-        lua_pushboolean(L, 1);
-        return 1;
+        return L.PushResult(OnSendFunctionCalled(lua_tostring(L, -2), args));
     }
 
     unsafe public LuaEngine () {

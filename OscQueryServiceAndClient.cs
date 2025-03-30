@@ -3,7 +3,7 @@ using VRC.OSCQuery;
 using Microsoft.Extensions.Logging;
 using ZLogger;
 
-class OscQueryServiceServiceAndClient {
+public class OscQueryServiceServiceAndClient {
     private readonly ILogger<OSCQueryService> _logger;
     private readonly OSCQueryService _queryService;
     private readonly OscServer _receiver;

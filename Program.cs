@@ -2,38 +2,7 @@
 using System.Threading.Channels;
 
 var osc = new OscQueryServiceServiceAndClient();
-LuaEngine.OnSendFunctionCalled += (key, values) => {
-    if (osc.Client == null) {
-        Console.WriteLine($"Not connected to VRChat client");
-        return;
-    }
-    if (values.Length == 0) {
-        osc.Client.SendNil(key);
-        return;
-    }
-    if (values.Length > 1) {
-        Console.WriteLine($"Not implemented: send() takes 1 or 2 arguments");
-        return;
-    }
-    var value = values[0];
-    switch (value) {
-        case bool b:
-            osc.Client.Send(key, b);
-            break;
-        case double d:
-            var err = osc.SendNumber(key, d);
-            if (err != null) {
-                Console.WriteLine($"Error sending {key} {d}: {err}");
-            }
-            break;
-        case string s:
-            osc.Client.Send(key, s);
-            break;
-        default:
-            Console.WriteLine($"Not implemented: {value?.GetType().Name ?? "null"}");
-            break;
-    }
-};
+LuaEngine.OnSendFunctionCalled += (key, values) => osc.WrappedSend(key, values);
 var luaEngine = new LuaEngine();
 
 osc.MonitorCallbacks += (address, values) => {
