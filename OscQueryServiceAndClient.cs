@@ -11,6 +11,7 @@ class OscQueryServiceServiceAndClient {
     private OSCQueryServiceProfile? _vrchatClientQscQueryService = null;
     private OscClient? _client;
     public OscClient? Client => _client;
+    private OSCQueryRootNode? _tree;
 
     public readonly int TcpPort;
     public readonly int UdpPort;
@@ -42,7 +43,8 @@ class OscQueryServiceServiceAndClient {
         );
         _queryService.OnOscQueryServiceAdded += DetectVrcClientQueryService;
 
-        _refreshTimer = new System.Timers.Timer(5_000);
+        _queryService.RefreshServices();
+        _refreshTimer = new System.Timers.Timer(10_000);
         _refreshTimer.Elapsed += (_, _) => _queryService.RefreshServices();
         _refreshTimer.Start();
         Console.WriteLine($"queryService service running on port {TcpPort}");
@@ -59,9 +61,29 @@ class OscQueryServiceServiceAndClient {
         var info = await Extensions.GetHostInfo(profile.address, profile.port);
         _client = new OscClient(info.oscIP, info.oscPort);
         Console.WriteLine($"Found VRChat client: {profile.name} {profile.address}:{profile.port} {profile.GetServiceTypeString()}");
-        var tree = await Extensions.GetOSCTree(profile.address, profile.port);
-        var avatarParametersNode = tree.GetNodeWithPath("/avatar/parameters");
+        _tree = await Extensions.GetOSCTree(profile.address, profile.port);
+        var avatarParametersNode = _tree.GetNodeWithPath("/avatar/parameters");
         if (avatarParametersNode != null) OnUpdateAvatarParameterDefinitions(avatarParametersNode);
+    }
+    public string? SendNumber(string key, double value) {
+        if (_tree == null) return "get OSC tree is not completed";
+        var node = _tree.GetNodeWithPath(key);
+        if (node == null) return $"node not found: {key}";
+        switch (node.OscType) {
+            case "i":
+                _client.Send(key, (int)value);
+                break;
+            case "f":
+                _client.Send(key, (float)value);
+                break;
+            case "d":
+                _client.Send(key, value);
+                break;
+            // TODO: "h", "t"
+            default:
+                return $"unexpected type: {node.OscType}";
+        }
+        return null;
     }
     public void Dispose()
     {
