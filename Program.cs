@@ -2,6 +2,7 @@
 using VRC.OSCQuery;
 using Microsoft.Extensions.Logging;
 using ZLogger;
+using Newtonsoft.Json;
 
 using var factory = LoggerFactory.Create(logging => {
     logging.SetMinimumLevel(LogLevel.Trace);
@@ -46,7 +47,7 @@ Console.CancelKeyPress += (_sender, e) => {
     e.Cancel = true;
 };
 OSCQueryServiceProfile? vrchatClient = null;
-OSCQueryNode? avatarChangeNode = null;
+OSCQueryNode? avatarParametersNode = null;
 OscClient? client = null;
 refreshTimer.Start();
 oscQuery.OnOscQueryServiceAdded += async (OSCQueryServiceProfile profile) => {
@@ -57,9 +58,14 @@ oscQuery.OnOscQueryServiceAdded += async (OSCQueryServiceProfile profile) => {
     client = new OscClient(info.oscIP, info.oscPort);
     Console.WriteLine($"Found VRChat client: {profile.name} {profile.address}:{profile.port} {profile.GetServiceTypeString()}");
     var tree = await Extensions.GetOSCTree(profile.address, profile.port);
-    avatarChangeNode = tree.GetNodeWithPath("/avatar/change");
-
-    Console.WriteLine($"avatarChangeNode.Value {avatarChangeNode.Value}");
+    avatarParametersNode = tree.GetNodeWithPath("/avatar/parameters");
+    if (avatarParametersNode != null) {
+        var parameters = String.Join(",", avatarParametersNode.Contents.Select(
+            kv => $"{kv.Key}: {string.Join(" ", kv.Value.Value?.Select(obj => obj?.ToString() ?? "null") ?? new string[] { "" })}"
+        ));
+        Console.WriteLine($"Found avatar parameters: {parameters}");
+        // Console.WriteLine($"Found avatar parameters: {JsonConvert.SerializeObject(avatarParametersNode)}");
+    }
 };
 oscQuery.AddEndpoint<string>("/avatar/change", Attributes.AccessValues.ReadWrite, null, "avatar change");
 int i = 30;
