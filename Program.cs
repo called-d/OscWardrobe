@@ -13,9 +13,7 @@ osc.MonitorCallbacks += (address, values) => {
         case "/avatar/change": {
             if (values.ElementCount != 1) return;
             if (values.GetTypeTag(0) != TypeTag.String) return;
-            var avatar = values.ReadStringElement(0);
-            // TODO: なんか2連続で発火する
-            luaEngine.OnReceiveAvatarChange(avatar);
+            luaEngine.Call("on_avatar_change", values.ReadStringElement(0));
             break;
         }
         default:

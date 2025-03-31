@@ -1,3 +1,6 @@
+using LuaNET.Lua54;
+using static LuaNET.Lua54.Lua;
+
 public static class Bindings {
     public static string WrappedSend(this OscQueryServiceServiceAndClient osc, string key, object[] values) {
         if (osc.Client == null) return "Not connected to VRChat client";
@@ -23,5 +26,31 @@ public static class Bindings {
                 break;
         }
         return null;
+    }
+    public static int PushValues(this lua_State L, object[] values) {
+        foreach (var value in values) {
+            switch (value) {
+                case bool b:
+                    lua_pushboolean(L, b ? 1 : 0);
+                    break;
+                case double d:
+                    lua_pushnumber(L, d);
+                    break;
+                case float f:
+                    lua_pushnumber(L, f);
+                    break;
+                case string s:
+                    lua_pushstring(L, s);
+                    break;
+                case null:
+                    lua_pushnil(L);
+                    break;
+                default:
+                    Console.WriteLine($"Not implemented: {value?.GetType().Name ?? "null"}");
+                    lua_pushnil(L);
+                    break;
+            }
+        }
+        return values.Length;
     }
 }

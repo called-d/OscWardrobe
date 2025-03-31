@@ -155,21 +155,10 @@ class LuaEngine {
             Console.WriteLine("main is not a function");
         }
     }
-    public void OnReceiveAvatarChange(string avatar) {
-        lua_getglobal(T, "on_avatar_change");
-        if (lua_type(T, -1) != LUA_TFUNCTION) {
-            Console.WriteLine("on_avatar_change is not a function");
-            return;
-        }
-        lua_pushstring(T, avatar);
-        if (lua_pcall(T, 1, 0, 0) != 0) {
-            Console.WriteLine(_error = lua_tostring(T, -1));
-        }
-    }
-    public void Call(string functionName) {
+    public void Call(string functionName, params object[] args) {
         var c = new LuaCoroutine(L, functionName);
         Coroutines.Add(c.L, c);
-        c.Resume();
+        c.Resume(args);
         RemoveEndCoroutines();
     }
     public void Update() {
@@ -208,7 +197,7 @@ class LuaEngine {
                 return;
             }
         }
-        public int Resume() {
+        public int Resume(params object[] args) {
             if (IsEnd) return 0;
             var _s = lua_status(L);
             if (!(_s == LUA_YIELD || _s == LUA_OK)) {
@@ -217,7 +206,8 @@ class LuaEngine {
                 IsEnd = true;
                 return 0;
             }
-            var s = lua_resume(L, L, 0, ref nres);
+            L.PushValues(args);
+            var s = lua_resume(L, L, args.Length, ref nres);
             Console.WriteLine($"stack size: {lua_gettop(L)}");
             printState(s);
             if (s == LUA_ERRRUN) {
