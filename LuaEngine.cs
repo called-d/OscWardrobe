@@ -169,7 +169,7 @@ class LuaEngine {
         RemoveEndCoroutines();
     }
     public void Update() {
-        foreach (var c in Coroutines.Values) {
+        foreach (var c in Coroutines.Values.ToList()) {
             if (c.IsSleeping && c.sleepUntil < System.DateTime.Now) {
                 c.sleepUntil = null;
             }
