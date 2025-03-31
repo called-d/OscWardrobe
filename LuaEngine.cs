@@ -96,8 +96,8 @@ class LuaEngine {
         lua_pushcfunction(L, static (L) => {
             int nargs = lua_gettop(L);
             double sleepSeconds = 0.0;
-            if (nargs > 0 && lua_type(L, 0) == LUA_TNUMBER) {
-                sleepSeconds = lua_tonumber(L, 0);
+            if (nargs > 0 && lua_type(L, 1) == LUA_TNUMBER) {
+                sleepSeconds = lua_tonumber(L, 1);
             }
             var c = LuaEngine.Coroutines[L];
             c.SetSleep(sleepSeconds);
