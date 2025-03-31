@@ -8,18 +8,11 @@ bool vrcIsReady = false;
 
 osc.MonitorCallbacks += (address, values) => {
     var address_ = address.ToString();
-    if (!address_.StartsWith("/avatar/")) return;
-    switch (address_) {
-        case "/avatar/change": {
-            if (values.ElementCount != 1) return;
-            if (values.GetTypeTag(0) != TypeTag.String) return;
-            luaEngine.Call("on_avatar_change", values.ReadStringElement(0));
-            break;
-        }
-        default:
-            Console.WriteLine($"Received {address} {values}");
-            return;
-    }
+    // if (!(
+    //     address_.StartsWith("/avatar/change")
+    //     || address_.StartsWith("/avatar/parameters/wardrobe"))
+    // ) return;
+    luaEngine.Call("receive", [address_, .. values.ToObjectArray()]);
 };
 osc.OnUpdateAvatarParameterDefinitions += avatarParametersNode => {
     if (!vrcIsReady) {

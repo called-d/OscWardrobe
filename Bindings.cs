@@ -1,5 +1,6 @@
 using LuaNET.Lua54;
 using static LuaNET.Lua54.Lua;
+using BuildSoft.OscCore;
 
 public static class Bindings {
     public static string WrappedSend(this OscQueryServiceServiceAndClient osc, string key, object[] values) {
@@ -52,5 +53,46 @@ public static class Bindings {
             }
         }
         return values.Length;
+    }
+    public static object[] ToObjectArray(this OscMessageValues oscMessageValues) {
+        var values = new object[oscMessageValues.ElementCount];
+        oscMessageValues.ForEachElement((i, tag) => {
+            switch (tag) {
+                case TypeTag.True:
+                case TypeTag.False:
+                    values[i] = oscMessageValues.ReadBooleanElement(i);
+                    break;
+                case TypeTag.Int32:
+                    values[i] = oscMessageValues.ReadIntElement(i);
+                    break;
+                case TypeTag.Float32:
+                    values[i] = oscMessageValues.ReadFloatElement(i);
+                    break;
+                case TypeTag.Float64:
+                    values[i] = oscMessageValues.ReadFloat64Element(i);
+                    break;
+                case TypeTag.AltTypeString:
+                case TypeTag.String:
+                    values[i] = oscMessageValues.ReadStringElement(i);
+                    break;
+                case TypeTag.Nil:
+                    values[i] = null;
+                    break;
+                // case TypeTag.Infinitum:
+                // case TypeTag.Blob:
+                // case TypeTag.AsciiChar32:
+                // case TypeTag.Int64:
+                // case TypeTag.MIDI:
+                // case TypeTag.Color32:
+                // case TypeTag.TimeTag:
+                // case TypeTag.ArrayStart:
+                // case TypeTag.ArrayEnd:
+                default:
+                    Console.WriteLine($"Not implemented: {tag}");
+                    values[i] = null;
+                    break;
+            }
+        });
+        return values;
     }
 }

@@ -135,6 +135,13 @@ class LuaEngine {
             function on_avatar_change(avatar)
                 print("avatar changed", avatar)
             end
+
+            function receive(address, values)
+                print("received", address, values)
+                if address == "/avatar/change" then
+                    on_avatar_change(values[1])
+                end
+            end
         """;
 
         var load = new LuaCoroutine(L);
