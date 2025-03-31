@@ -12,6 +12,7 @@ public class OscQueryServiceServiceAndClient {
     private OscClient? _client;
     public OscClient? Client => _client;
     private OSCQueryRootNode? _tree;
+    private HashSet<MonitorCallback> _monitorCallbacks = new();
 
     public readonly int TcpPort;
     public readonly int UdpPort;
@@ -42,6 +43,11 @@ public class OscQueryServiceServiceAndClient {
     }
     public void Start() {
         _receiver = OscServer.GetOrCreate(UdpPort);
+        while (_monitorCallbacks.Count > 0) {
+            var callback = _monitorCallbacks.First();
+            _receiver.AddMonitorCallback(callback);
+            _monitorCallbacks.Remove(callback);
+        }
         Console.WriteLine($"receiver running on port {UdpPort}");
 
         _queryService.StartHttpServer();
@@ -59,8 +65,20 @@ public class OscQueryServiceServiceAndClient {
         _refreshTimer.Start();
     }
     public event MonitorCallback MonitorCallbacks {
-        add => _receiver?.AddMonitorCallback(value);
-        remove => _receiver?.RemoveMonitorCallback(value);
+        add {
+            if (_receiver == null) {
+                _monitorCallbacks.Add(value);
+                return;
+            }
+            _receiver.AddMonitorCallback(value);
+        }
+        remove {
+            if (_receiver == null) {
+                _monitorCallbacks.Remove(value);
+                return;
+            }
+            _receiver.RemoveMonitorCallback(value);
+        }
     }
     public Action<OSCQueryNode> OnUpdateAvatarParameterDefinitions = delegate { };
     private async void DetectVrcClientQueryService(OSCQueryServiceProfile profile) {
