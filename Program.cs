@@ -30,19 +30,24 @@ osc.Start();
 
 bool running = true;
 Console.CancelKeyPress += (_sender, e) => {
-    running = false;
+    ThreadEvents.Exit.Set();
     e.Cancel = true;
 };
 
-int i = 30;
+var app = new FormApplication();
+app.Start();
+
 while (running) {
-    Thread.Sleep(500);
-    if (--i == 0) {
-        i = 30;
-        //
+    switch (System.Threading.WaitHandle.WaitAny(ThreadEvent.events, 100)) {
+        case (int)ThreadEvents.Exit:
+            running = false;
+            break;
     }
     luaEngine.Update();
 }
+
+app.Dispose();
+ThreadEvent.events.ToList().ForEach(e => e.Dispose());
 luaEngine.Dispose();
 osc.Dispose();
 Console.WriteLine($"Gracefully shutting down OSCQuery service");
