@@ -1,0 +1,18 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "C#: OscWardrobe",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "dotnet: build",
+            "program": "${workspaceFolder}/bin/Debug/net9.0-windows/win-x64/OscWardrobe.exe",
+            "stopAtEntry": false,
+            "args": ["--overwrite-all-lua"],
+            "cwd": "${workspaceFolder}/bin/Debug/net9.0-windows/win-x64/",
+        }
+    ]
+}

@@ -1,6 +1,10 @@
 ﻿using BuildSoft.OscCore;
 using System.Threading.Channels;
 
+if (args.Contains("--overwrite-all-lua")) {
+    Console.WriteLine("Overwrite Lua Files");
+    System.IO.Directory.Delete("lua", true);
+}
 FormApplication.ExtractLua();
 
 var osc = new OscQueryServiceServiceAndClient();
