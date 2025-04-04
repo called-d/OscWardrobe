@@ -1,6 +1,8 @@
 ﻿using BuildSoft.OscCore;
 using System.Threading.Channels;
 
+FormApplication.ExtractLua();
+
 var osc = new OscQueryServiceServiceAndClient();
 LuaEngine.OnSendFunctionCalled += (key, values) => osc.WrappedSend(key, values);
 var luaEngine = new LuaEngine();
@@ -41,6 +43,9 @@ while (running) {
     switch (System.Threading.WaitHandle.WaitAny(ThreadEvent.events, 100)) {
         case (int)ThreadEvents.Exit:
             running = false;
+            break;
+        case (int)ThreadEvents.ExtactLua:
+            FormApplication.ExtractLua(true);
             break;
     }
     luaEngine.Update();

@@ -24,4 +24,13 @@
     <EmbeddedResource Include="**\*.md" />
   </ItemGroup>
 
+  <Target Name="EmbedLuaZip" BeforeTargets="ResolveReferences">
+    <ZipDirectory
+      SourceDirectory="$(MSBuildProjectDirectory)\lua\"
+      DestinationFile="$(Outdir)Lua.zip"
+      Overwrite="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(Outdir)Lua.zip" LogicalName="OscWardrobe.Lua.zip" />
+    </ItemGroup>
+  </Target>
 </Project>

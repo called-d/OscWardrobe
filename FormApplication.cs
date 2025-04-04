@@ -5,10 +5,27 @@ class FormApplication {
     System.Drawing.Icon icon;
     NotifyIcon nofifyIcon;
 
-    private System.IO.Stream GetStream(string name) {
+    private static System.IO.Stream GetStream(string name) {
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         var name_ = $"{assembly.GetName().Name}.{name}";
         return assembly.GetManifestResourceStream(name_) ?? throw new System.Exception($"Resource {name_} not found");
+    }
+
+    public static bool ExtractLua(bool force = false) {
+        var dirName = "lua";
+        if (force) {
+            var i = 0;
+            while (System.IO.Directory.Exists(dirName)) {
+                dirName = $"lua.{i++}";
+            }
+        } else {
+            if (System.IO.Directory.Exists("lua")) return false;
+        }
+        System.IO.Compression.ZipFile.ExtractToDirectory(
+            GetStream("Lua.zip"),
+            dirName
+        );
+        return true;
     }
 
     public FormApplication() {
@@ -88,12 +105,21 @@ class FormApplication {
 
     public ContextMenuStrip CreateContextMenu() {
         var menu = new ContextMenuStrip();
+        menu.Items.Add(CreateLuaMenu());
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem(
             "Show License", null, (_s, _e) => ShowLicenseWindow(), "Show License"
         ));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem(
             "&Exit", null, (_s, _e) => ThreadEvents.Exit.Set(), "Exit"
+        ));
+        return menu;
+    }
+    private ToolStripMenuItem CreateLuaMenu() {
+        var menu = new ToolStripMenuItem("Lua");
+        menu.DropDownItems.Add(new ToolStripMenuItem(
+            "Extract Default Lua Files", null, (_s, _e) => ThreadEvents.ExtactLua.Set(), "Extract Default Lua Files"
         ));
         return menu;
     }
