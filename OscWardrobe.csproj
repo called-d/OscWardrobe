@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <ApplicationIcon>wardrobe.ico</ApplicationIcon>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -13,9 +13,11 @@
   <ItemGroup>
     <PackageReference Include="BuildSoft.OscCore" Version="1.2.1.1" />
     <PackageReference Include="Lua.NET" Version="5.0.3" />
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="9.0.3" />
     <PackageReference Include="VRChat.OSCQuery" Version="0.0.7" />
     <PackageReference Include="ZLogger" Version="2.5.10" />
     <Resource Include="wardrobe.ico" />
+    <EmbeddedResource Include="**\*.md" />
   </ItemGroup>
 
 </Project>
