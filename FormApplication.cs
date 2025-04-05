@@ -10,22 +10,23 @@ class FormApplication {
         return assembly.GetManifestResourceStream(name_) ?? throw new Exception($"Resource {name_} not found");
     }
 
-    public static bool ExtractLua(string workDir, bool force = false) {
+    /// <summary>初回起動時に "lua/" フォルダがなければ展開する</summary>
+    public static bool ExtractLuaIfNeeded(string workDir) {
         var luaDir = Path.Combine(workDir, "lua");
-        if (force) {
-            var i = 1;
-            while (Directory.Exists(luaDir)) {
-                luaDir = Path.Combine(workDir, $"lua ({i++})");
-            }
-        } else {
-            if (Directory.Exists(luaDir)) return false;
-        }
-        System.IO.Compression.ZipFile.ExtractToDirectory(
-            GetStream("Lua.zip"),
-            luaDir
-        );
-        if (force) System.Diagnostics.Process.Start("explorer.exe", luaDir);
+        if (Directory.Exists(luaDir)) return false;
+        System.IO.Compression.ZipFile.ExtractToDirectory(GetStream("Lua.zip"), luaDir);
         return true;
+    }
+
+    /// <summary>バージョンが上がって中身が変わった場合に、衝突を避けたいがユーザーが新しい版を取り出せるように</summary>
+    public static void ExtractLuaForce(string workDir) {
+        var luaDir = Path.Combine(workDir, "lua");
+        var i = 1;
+        while (Directory.Exists(luaDir)) {
+            luaDir = Path.Combine(workDir, $"lua ({i++})");
+        }
+        System.IO.Compression.ZipFile.ExtractToDirectory(GetStream("Lua.zip"), luaDir);
+        System.Diagnostics.Process.Start("explorer.exe", luaDir);
     }
 
     public FormApplication() {

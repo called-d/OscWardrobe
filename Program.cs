@@ -4,7 +4,7 @@ if (args.Contains("--overwrite-all-lua")) {
     if (Directory.Exists("lua")) Directory.Delete("lua", true);
 }
 var workDir = Environment.CurrentDirectory;
-FormApplication.ExtractLua(workDir);
+FormApplication.ExtractLuaIfNeeded(workDir);
 Environment.CurrentDirectory = Path.Combine(workDir, "lua");
 
 var osc = new OscQueryServiceServiceAndClient();
@@ -49,7 +49,7 @@ while (running) {
             running = false;
             break;
         case (int)ThreadEvents.ExtactLua:
-            FormApplication.ExtractLua(workDir, true);
+            FormApplication.ExtractLuaForce(workDir);
             break;
     }
     luaEngine.Update();
