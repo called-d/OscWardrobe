@@ -24,6 +24,7 @@ class FormApplication {
             GetStream("Lua.zip"),
             luaDir
         );
+        if (force) System.Diagnostics.Process.Start("explorer.exe", luaDir);
         return true;
     }
 
