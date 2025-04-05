@@ -57,5 +57,6 @@ while (running) {
 app.Dispose();
 ThreadEvent.events.ToList().ForEach(e => e.Dispose());
 luaEngine.Dispose();
+LuaEngine.DisposeAll();
 osc.Dispose();
 Console.WriteLine($"Gracefully shutting down OSCQuery service");

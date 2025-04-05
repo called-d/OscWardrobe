@@ -14,11 +14,12 @@ static class LuaStateExtension {
     }
 }
 
-class LuaEngine {
+class LuaEngine: IDisposable {
     lua_State L;
     lua_State T;
     private string? _error = null;
     public string? Error => _error;
+    private static readonly IntPtr LuaSideCoroutinesRefTableRegistryKeyUserDataPointer = Marshal.AllocHGlobal(sizeof(int));
     private static readonly Dictionary<lua_State, LuaCoroutine> Coroutines = [];
     public static Func<string, object?[], string?> OnSendFunctionCalled = (_, _) => null;
 
@@ -184,30 +185,36 @@ class LuaEngine {
     public LuaEngine () {
         L = luaL_newstate();
         OpenLibs(L);
+        CreateCoroutineRefTable(L);
 
         var mainLua = File.ReadAllText("main.lua");
 
         var load = new LuaCoroutine(L);
-        Coroutines.Add(T = load.L, load);
+        T = load.L;
+        luaL_checkstack(L, 100, "stack size grow");
         var status = luaL_loadstring(T, mainLua);
         if (status == 0) {
             while (!load.IsEnd) load.Resume();
             if (lua_gettop(T) > 0) Console.WriteLine(lua_tostring(T, -1));
         }
+        lua_pop(T, lua_gettop(T)); // pop all values
         lua_getglobal(T, "main");
         if (lua_type(T, -1) == LUA_TFUNCTION) {
             lua_pop(T, 1);
             var main = new LuaCoroutine(T, "main");
-            Coroutines.Add(main.L, main);
             main.Resume();
             RemoveEndCoroutines();
         } else {
             Console.WriteLine("main is not a function");
+            lua_pop(T, 1);
         }
     }
     public void Call(string functionName, params object?[] args) {
-        var c = new LuaCoroutine(L, functionName);
-        Coroutines.Add(c.L, c);
+        if (lua_checkstack(T, 100) == 0) {
+            // スタックに余裕がない
+            Console.WriteLine("stack size is not enough");
+        }
+        var c = new LuaCoroutine(T, functionName);
         c.Resume(args);
         RemoveEndCoroutines();
     }
@@ -226,23 +233,28 @@ class LuaEngine {
     }
 
 #region Coroutine
-    private class LuaCoroutine {
+    private class LuaCoroutine: IDisposable {
         public lua_State L;
+        private lua_State _upL;
+        private readonly int _ref;
         int nres = 0;
         public bool IsEnd = false;
         public DateTime? sleepUntil;
         public bool IsSleeping => sleepUntil != null;
         public void SetSleep(double seconds) { sleepUntil = DateTime.Now.AddSeconds(seconds); }
 
-        public LuaCoroutine(lua_State L) {
-            this.L = lua_newthread(L);
+        public LuaCoroutine(lua_State upL) {
+            _upL = upL;
+            L = lua_newthread(upL);
+            _ref = RefCoroutine();
+            Coroutines.Add(L, this);
         }
 
-        public LuaCoroutine(lua_State L, string functionNameGlobal) {
-            this.L = lua_newthread(L);
-            lua_getglobal(this.L, functionNameGlobal);
-            if (lua_type(this.L, -1) != LUA_TFUNCTION) {
+        public LuaCoroutine(lua_State upL, string functionNameGlobal): this(upL) {
+            lua_getglobal(L, functionNameGlobal);
+            if (lua_type(L, -1) != LUA_TFUNCTION) {
                 Console.WriteLine($"{functionNameGlobal} is not a function");
+                lua_pop(L, 1);
                 IsEnd = true;
                 return;
             }
@@ -283,36 +295,53 @@ class LuaEngine {
             }
             throw new Exception($"unknown state: s");
         }
+        private int RefCoroutine() {
+            lua_pushlightuserdata(_upL, (nuint)LuaSideCoroutinesRefTableRegistryKeyUserDataPointer);
+            lua_rawget(_upL, LUA_REGISTRYINDEX);
+            lua_insert(_upL, -2);
+            var ref_ = luaL_ref(_upL, -2);
+            lua_pop(_upL, 1);
+            return ref_;
+        }
+        private void UnrefCoroutine() {
+            lua_pushlightuserdata(_upL, (nuint)LuaSideCoroutinesRefTableRegistryKeyUserDataPointer);
+            lua_rawget(_upL, LUA_REGISTRYINDEX);
+            luaL_unref(_upL, -1, _ref);
+            lua_pop(_upL, 1);
+        }
+        public void Dispose() {
+            UnrefCoroutine();
+        }
 
         private void printState(int s) {
-            switch (s) {
-                case LUA_OK:
-                    Console.WriteLine("LUA_OK");
-                    break;
-                case LUA_YIELD:
-                    Console.WriteLine("LUA_YIELD");
-                    break;
-                case LUA_ERRRUN:
-                    Console.WriteLine("LUA_ERRRUN");
-                    break;
-                case LUA_ERRSYNTAX:
-                    Console.WriteLine("LUA_ERRSYNTAX");
-                    break;
-                case LUA_ERRMEM:
-                    Console.WriteLine("LUA_ERRMEM");
-                    break;
-                case LUA_ERRERR:
-                    Console.WriteLine("LUA_ERRERR");
-                    break;
-                default:
-                    Console.WriteLine("unknown");
-                    break;
-            }
+            Console.WriteLine(s switch {
+                LUA_OK => "LUA_OK",
+                LUA_YIELD => "LUA_YIELD",
+                LUA_ERRRUN => "LUA_ERRRUN",
+                LUA_ERRSYNTAX => "LUA_ERRSYNTAX",
+                LUA_ERRMEM => "LUA_ERRMEM",
+                LUA_ERRERR => "LUA_ERRERR",
+                _ => "unknown"
+            });
         }
 
     }
     private void RemoveEndCoroutines() {
-        Coroutines.Where(kv => kv.Value.IsEnd).Select(kv => kv.Key).ToList().ForEach(k => Coroutines.Remove(k));
+        Coroutines.Where(kv => kv.Value.IsEnd).ToList().ForEach(kv => {
+            kv.Value.Dispose();
+            Coroutines.Remove(kv.Key);
+        });
+    }
+    private static void CreateCoroutineRefTable(lua_State L) {
+        lua_pushlightuserdata(L, (nuint)LuaSideCoroutinesRefTableRegistryKeyUserDataPointer);
+        lua_createtable(L, 100, 0);
+        lua_rawset(L, LUA_REGISTRYINDEX);
+    }
+
+    public static void DisposeAll() {
+        if (LuaSideCoroutinesRefTableRegistryKeyUserDataPointer != IntPtr.Zero) {
+            Marshal.FreeHGlobal(LuaSideCoroutinesRefTableRegistryKeyUserDataPointer);
+        }
     }
 #endregion
 }
