@@ -19,35 +19,32 @@ class LuaEngine {
     lua_State T;
     private string? _error = null;
     public string? Error => _error;
-    private static Dictionary<lua_State, LuaCoroutine> Coroutines = new Dictionary<lua_State, LuaCoroutine>() {};
-    public static Func<string, object[], string?> OnSendFunctionCalled = (_, _) => null;
+    private static readonly Dictionary<lua_State, LuaCoroutine> Coroutines = [];
+    public static Func<string, object?[], string?> OnSendFunctionCalled = (_, _) => null;
 
+#pragma warning disable IDE1006 // 先頭 _ を許容
     [UnmanagedCallersOnly]
     private static int _callSend(lua_State L) {
         int nargs = lua_gettop(L);
-        if (nargs == 0) return L.PushResult("no key");
+        if (nargs == 0) return L.PushResult("no address");
+        var address = lua_tostring(L, 1);
+        if (address == null) return L.PushResult("address is not string");
         if (nargs == 1) {
-            return L.PushResult(OnSendFunctionCalled(lua_tostring(L, -1), new object[] { null }));
+            return L.PushResult(OnSendFunctionCalled(address, [null]));
         }
         if (nargs == 3) return L.PushResult("not implemented: send() only takes 1 or 2 arguments");
 
-        var args = new object[nargs - 1];
-        switch (lua_type(L, -1)) {
-            case LUA_TBOOLEAN:
-                args[0] = lua_toboolean(L, -1) != 0;
-                break;
-            case LUA_TNUMBER:
-                args[0] = lua_tonumber(L, -1);
-                break;
-            case LUA_TSTRING:
-                args[0] = lua_tostring(L, -1);
-                break;
-            default:
-                args[0] = null;
-                break;
-        }
-        return L.PushResult(OnSendFunctionCalled(lua_tostring(L, -2), args));
+        var args = new object?[nargs - 1];
+        args[0] = lua_type(L, -1) switch
+        {
+            LUA_TBOOLEAN => lua_toboolean(L, -1) != 0,
+            LUA_TNUMBER => lua_tonumber(L, -1),
+            LUA_TSTRING => lua_tostring(L, -1),
+            _ => null,
+        };
+        return L.PushResult(OnSendFunctionCalled(address, args));
     }
+#pragma warning restore IDE1006
 
     unsafe private void OpenLibs(lua_State L) {
         // base 基本ライブラリ
@@ -86,10 +83,12 @@ class LuaEngine {
         // luaL_requiref(L, DBLIBNAME, luaopen_debug, 1); lua_pop(L, 1);
 
         // osc
-        luaL_newlib(L, new luaL_Reg[] {
+        luaL_newlib(L, [
             AsLuaLReg("send", &_callSend),
+#pragma warning disable CS8625 // AsLuaReg の第一引数が null になってもよい
             AsLuaLReg(null, null)
-        });
+#pragma warning restore CS8625
+        ]);
         lua_setglobal(L, "osc");
 
         // sleep
@@ -99,7 +98,7 @@ class LuaEngine {
             if (nargs > 0 && lua_type(L, 1) == LUA_TNUMBER) {
                 sleepSeconds = lua_tonumber(L, 1);
             }
-            var c = LuaEngine.Coroutines[L];
+            var c = Coroutines[L];
             c.SetSleep(sleepSeconds);
             lua_yield(L, 1);
             return 0;
@@ -114,7 +113,7 @@ class LuaEngine {
         L = luaL_newstate();
         OpenLibs(L);
 
-        var mainLua = System.IO.File.ReadAllText("lua/main.lua");
+        var mainLua = File.ReadAllText("lua/main.lua");
 
         var load = new LuaCoroutine(L);
         Coroutines.Add(T = load.L, load);
@@ -134,7 +133,7 @@ class LuaEngine {
             Console.WriteLine("main is not a function");
         }
     }
-    public void Call(string functionName, params object[] args) {
+    public void Call(string functionName, params object?[] args) {
         var c = new LuaCoroutine(L, functionName);
         Coroutines.Add(c.L, c);
         c.Resume(args);
@@ -142,7 +141,7 @@ class LuaEngine {
     }
     public void Update() {
         foreach (var c in Coroutines.Values.ToList()) {
-            if (c.IsSleeping && c.sleepUntil < System.DateTime.Now) {
+            if (c.IsSleeping && c.sleepUntil < DateTime.Now) {
                 c.sleepUntil = null;
             }
             if (!c.IsSleeping) c.Resume();
@@ -159,9 +158,9 @@ class LuaEngine {
         public lua_State L;
         int nres = 0;
         public bool IsEnd = false;
-        public System.DateTime? sleepUntil;
+        public DateTime? sleepUntil;
         public bool IsSleeping => sleepUntil != null;
-        public void SetSleep(double seconds) { sleepUntil = System.DateTime.Now.AddSeconds(seconds); }
+        public void SetSleep(double seconds) { sleepUntil = DateTime.Now.AddSeconds(seconds); }
 
         public LuaCoroutine(lua_State L) {
             this.L = lua_newthread(L);
@@ -176,7 +175,7 @@ class LuaEngine {
                 return;
             }
         }
-        public int Resume(params object[] args) {
+        public int Resume(params object?[] args) {
             if (IsEnd) return 0;
             var _s = lua_status(L);
             if (!(_s == LUA_YIELD || _s == LUA_OK)) {

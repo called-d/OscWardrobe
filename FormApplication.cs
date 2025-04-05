@@ -1,25 +1,24 @@
-using System.Resources;
 
 class FormApplication {
-    System.Threading.Thread applicationThread;
-    System.Drawing.Icon icon;
-    NotifyIcon nofifyIcon;
+    readonly Thread applicationThread;
+    readonly Icon icon;
+    NotifyIcon? nofifyIcon;
 
-    private static System.IO.Stream GetStream(string name) {
+    private static Stream GetStream(string name) {
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         var name_ = $"{assembly.GetName().Name}.{name}";
-        return assembly.GetManifestResourceStream(name_) ?? throw new System.Exception($"Resource {name_} not found");
+        return assembly.GetManifestResourceStream(name_) ?? throw new Exception($"Resource {name_} not found");
     }
 
     public static bool ExtractLua(bool force = false) {
         var dirName = "lua";
         if (force) {
             var i = 0;
-            while (System.IO.Directory.Exists(dirName)) {
+            while (Directory.Exists(dirName)) {
                 dirName = $"lua.{i++}";
             }
         } else {
-            if (System.IO.Directory.Exists("lua")) return false;
+            if (Directory.Exists("lua")) return false;
         }
         System.IO.Compression.ZipFile.ExtractToDirectory(
             GetStream("Lua.zip"),
@@ -29,10 +28,11 @@ class FormApplication {
     }
 
     public FormApplication() {
+        var executablePath = Environment.ProcessPath ?? throw new Exception("ProcessPath is null");
+        icon = Icon.ExtractAssociatedIcon(executablePath) ?? throw new Exception("Icon not found");
         applicationThread = new (() => {
-            var executablePath = System.Environment.ProcessPath;
             nofifyIcon = new NotifyIcon {
-                Icon = (icon = System.Drawing.Icon.ExtractAssociatedIcon(executablePath)),
+                Icon = icon,
                 Visible = true,
                 Text = "OSC Wardrobe",
                 ContextMenuStrip = CreateContextMenu(),
@@ -42,7 +42,7 @@ class FormApplication {
             Application.Run();
         });
         Application.SetHighDpiMode(HighDpiMode.SystemAware);
-        applicationThread.SetApartmentState(System.Threading.ApartmentState.STA);
+        applicationThread.SetApartmentState(ApartmentState.STA);
     }
 
     private void ShowLicenseWindow() {
@@ -58,7 +58,7 @@ class FormApplication {
         var form = new Form {
             FormBorderStyle = FormBorderStyle.Sizable,
             Text = "Licenses",
-            Size = new System.Drawing.Size(900, 600),
+            Size = new Size(900, 600),
             StartPosition = FormStartPosition.CenterScreen,
             Icon = icon,
         };
@@ -74,27 +74,27 @@ class FormApplication {
         panel.Controls.Add(l = new Label {
             AutoSize = true,
             Text = "License",
-            Location = new System.Drawing.Point(0, y),
+            Location = new Point(0, y),
         });
-        l.Font = new System.Drawing.Font(l.Font.Name, l.Font.Size * 2, System.Drawing.FontStyle.Bold);
+        l.Font = new Font(l.Font.Name, l.Font.Size * 2, FontStyle.Bold);
         y += l.Height + gap;
         panel.Controls.Add(l = new Label {
             AutoSize = true,
             Text = license,
-            Location = new System.Drawing.Point(0, y),
+            Location = new Point(0, y),
         });
         y += l.Height + gap;
         panel.Controls.Add(l = new Label {
             AutoSize = true,
             Text = "Third Party Licenses",
-            Location = new System.Drawing.Point(0, y),
+            Location = new Point(0, y),
         });
-        l.Font = new System.Drawing.Font(l.Font.Name, l.Font.Size * 2, System.Drawing.FontStyle.Bold);
+        l.Font = new Font(l.Font.Name, l.Font.Size * 2, FontStyle.Bold);
         y += l.Height + gap;
         panel.Controls.Add(l = new Label {
             AutoSize = true,
             Text = thirdPartyLicenses,
-            Location = new System.Drawing.Point(0, y),
+            Location = new Point(0, y),
         });
         y += l.Height + gap;
 
@@ -130,6 +130,6 @@ class FormApplication {
     public void Dispose() {
         Application.Exit();
         icon.Dispose();
-        nofifyIcon.Dispose();
+        nofifyIcon?.Dispose();
     }
 }

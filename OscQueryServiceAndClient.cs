@@ -12,7 +12,7 @@ public class OscQueryServiceServiceAndClient {
     private OscClient? _client;
     public OscClient? Client => _client;
     private OSCQueryRootNode? _tree;
-    private HashSet<MonitorCallback> _monitorCallbacks = new();
+    private readonly HashSet<MonitorCallback> _monitorCallbacks = [];
 
     public readonly int TcpPort;
     public readonly int UdpPort;
@@ -93,6 +93,8 @@ public class OscQueryServiceServiceAndClient {
         if (avatarParametersNode != null) OnUpdateAvatarParameterDefinitions(avatarParametersNode);
     }
     public string? SendNumber(string key, double value) {
+        if (_client == null) return "Not connected to VRChat client";
+
         if (_tree == null) return "get OSC tree is not completed";
         var node = _tree.GetNodeWithPath(key);
         if (node == null) return $"node not found: {key}";

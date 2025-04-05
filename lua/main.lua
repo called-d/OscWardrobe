@@ -15,7 +15,7 @@ function main()
     -- end
 end
 
-function on_avatar_change(avatar)
+local function on_avatar_change(avatar)
     print("avatar changed", avatar)
 end
 

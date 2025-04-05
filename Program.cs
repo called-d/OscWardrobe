@@ -1,14 +1,12 @@
-﻿using BuildSoft.OscCore;
-using System.Threading.Channels;
-
+﻿
 if (args.Contains("--overwrite-all-lua")) {
     Console.WriteLine("Overwrite Lua Files");
-    System.IO.Directory.Delete("lua", true);
+    Directory.Delete("lua", true);
 }
 FormApplication.ExtractLua();
 
 var osc = new OscQueryServiceServiceAndClient();
-LuaEngine.OnSendFunctionCalled += (key, values) => osc.WrappedSend(key, values);
+LuaEngine.OnSendFunctionCalled += osc.WrappedSend;
 var luaEngine = new LuaEngine();
 bool vrcIsReady = false;
 
@@ -26,7 +24,7 @@ osc.OnUpdateAvatarParameterDefinitions += avatarParametersNode => {
         luaEngine.Call("ready");
     }
     var parameters = String.Join(",", avatarParametersNode.Contents.Select(
-        kv => $"{kv.Key}: {string.Join(" ", kv.Value.Value?.Select(obj => obj?.ToString() ?? "null") ?? new string[] { "" })}"
+        kv => $"{kv.Key}: {string.Join(" ", kv.Value.Value?.Select(obj => obj?.ToString() ?? "null") ?? [""])}"
     ));
     Console.WriteLine($"Found avatar parameters: {parameters}");
     // Console.WriteLine($"Found avatar parameters: {JsonConvert.SerializeObject(avatarParametersNode)}");
@@ -44,7 +42,7 @@ var app = new FormApplication();
 app.Start();
 
 while (running) {
-    switch (System.Threading.WaitHandle.WaitAny(ThreadEvent.events, 100)) {
+    switch (WaitHandle.WaitAny(ThreadEvent.events, 100)) {
         case (int)ThreadEvents.Exit:
             running = false;
             break;

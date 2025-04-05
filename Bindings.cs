@@ -3,7 +3,7 @@ using static LuaNET.Lua54.Lua;
 using BuildSoft.OscCore;
 
 public static class Bindings {
-    public static string WrappedSend(this OscQueryServiceServiceAndClient osc, string key, object[] values) {
+    public static string? WrappedSend(this OscQueryServiceServiceAndClient osc, string key, object?[] values) {
         if (osc.Client == null) return "Not connected to VRChat client";
         if (values.Length == 0) {
             osc.Client.SendNil(key);
@@ -24,11 +24,10 @@ public static class Bindings {
                 break;
             default:
                 return $"Not implemented: {value?.GetType().Name ?? "null"}";
-                break;
         }
         return null;
     }
-    public static int PushValues(this lua_State L, object[] values) {
+    public static int PushValues(this lua_State L, object?[] values) {
         foreach (var value in values) {
             switch (value) {
                 case bool b:
@@ -54,7 +53,7 @@ public static class Bindings {
         }
         return values.Length;
     }
-    public static object[] ToObjectArray(this OscMessageValues oscMessageValues) {
+    public static object?[] ToObjectArray(this OscMessageValues oscMessageValues) {
         var values = new object[oscMessageValues.ElementCount];
         oscMessageValues.ForEachElement((i, tag) => {
             switch (tag) {
@@ -76,7 +75,9 @@ public static class Bindings {
                     values[i] = oscMessageValues.ReadStringElement(i);
                     break;
                 case TypeTag.Nil:
+# pragma warning disable CS8625
                     values[i] = null;
+# pragma warning restore CS8625
                     break;
                 // case TypeTag.Infinitum:
                 // case TypeTag.Blob:
@@ -89,7 +90,9 @@ public static class Bindings {
                 // case TypeTag.ArrayEnd:
                 default:
                     Console.WriteLine($"Not implemented: {tag}");
+# pragma warning disable CS8625
                     values[i] = null;
+# pragma warning restore CS8625
                     break;
             }
         });
