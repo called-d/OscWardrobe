@@ -11,18 +11,18 @@ class FormApplication {
     }
 
     public static bool ExtractLua(string workDir, bool force = false) {
-        var dirName = "lua";
+        var luaDir = Path.Combine(workDir, "lua");
         if (force) {
             var i = 1;
-            while (Directory.Exists(Path.Combine(workDir, dirName))) {
-                dirName = $"lua ({i++})";
+            while (Directory.Exists(luaDir)) {
+                luaDir = Path.Combine(workDir, $"lua ({i++})");
             }
         } else {
-            if (Directory.Exists(Path.Combine(workDir, dirName))) return false;
+            if (Directory.Exists(luaDir)) return false;
         }
         System.IO.Compression.ZipFile.ExtractToDirectory(
             GetStream("Lua.zip"),
-            Path.Combine(workDir, dirName)
+            luaDir
         );
         return true;
     }
