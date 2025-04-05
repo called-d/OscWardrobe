@@ -1,7 +1,7 @@
 ﻿
 if (args.Contains("--overwrite-all-lua")) {
     Console.WriteLine("Overwrite Lua Files");
-    Directory.Delete("lua", true);
+    if (Directory.Exists("lua")) Directory.Delete("lua", true);
 }
 FormApplication.ExtractLua();
 Environment.CurrentDirectory = Path.Combine(Environment.CurrentDirectory, "lua");
