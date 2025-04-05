@@ -45,6 +45,8 @@ class LuaEngine: IDisposable {
         return false;
     }
 
+#pragma warning disable IDE1006 // 先頭 _ や snake_case を許容
+
     /** from lbaselib.c Copyright © 1994–2024 Lua.org, PUC-Rio. https://www.lua.org/license.html */
     private static int  load_aux (lua_State L, int status, int envidx) {
         if (/* l_likely(*/status == LUA_OK/*)*/) {
@@ -62,6 +64,8 @@ class LuaEngine: IDisposable {
         }
     }
 
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
+#pragma warning disable CS8604 // Possible null reference argument.
     /** from lbaselib.c Copyright © 1994–2024 Lua.org, PUC-Rio. https://www.lua.org/license.html */
     static int luaB_loadfile (lua_State L) {
         var fname = luaL_optstring(L, 1, null);
@@ -70,8 +74,9 @@ class LuaEngine: IDisposable {
         int status = luaL_loadfilex(L, fname, mode);
         return load_aux(L, status, env);
     }
+#pragma warning restore CS8604 // Possible null reference argument.
+#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
 
-#pragma warning disable IDE1006 // 先頭 _ を許容
     private static int _dofile(lua_State L) {
         int nargs = lua_gettop(L);
         if (nargs == 0) return L.PushResult("filename is required");
