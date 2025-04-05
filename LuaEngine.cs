@@ -22,7 +22,79 @@ class LuaEngine {
     private static readonly Dictionary<lua_State, LuaCoroutine> Coroutines = [];
     public static Func<string, object?[], string?> OnSendFunctionCalled = (_, _) => null;
 
+    public static string LuaFileTopDirectory => Environment.CurrentDirectory;
+    public static bool IsInLuaDirectory(string path, out string? error) {
+        var luaRoot = LuaFileTopDirectory;
+        var fullPath = Path.GetFullPath(path, luaRoot);
+        DirectoryInfo? d = File.Exists(fullPath)
+            ? new FileInfo(fullPath).Directory
+            : Directory.GetParent(fullPath);
+        if (d == null) {
+            error = "directory is not exist";
+            return false;
+        }
+        while (d != null) {
+            if (d.FullName == luaRoot) {
+                error = null;
+                return true;
+            }
+            d = d.Parent;
+        }
+        error = $"{path} is not in lua directory";
+        return false;
+    }
+
+    /** from lbaselib.c Copyright © 1994–2024 Lua.org, PUC-Rio. https://www.lua.org/license.html */
+    private static int  load_aux (lua_State L, int status, int envidx) {
+        if (/* l_likely(*/status == LUA_OK/*)*/) {
+            if (envidx != 0) {  /* 'env' parameter? */
+                lua_pushvalue(L, envidx);  /* environment for loaded function */
+                if (/*!*/null == lua_setupvalue(L, -2, 1))  /* set it as 1st upvalue */
+                    lua_pop(L, 1);  /* remove 'env' if not used by previous call */
+            }
+            return 1;
+        }
+        else {  /* error (message is on top of the stack) */
+            luaL_pushfail(L);
+            lua_insert(L, -2);  /* put before error message */
+            return 2;  /* return fail plus error message */
+        }
+    }
+
+    /** from lbaselib.c Copyright © 1994–2024 Lua.org, PUC-Rio. https://www.lua.org/license.html */
+    static int luaB_loadfile (lua_State L) {
+        var fname = luaL_optstring(L, 1, null);
+        var mode = luaL_optstring(L, 2, null);
+        int env = /*(!*/lua_isnone(L, 3) == 0 ? 3 : 0/*)*/;  /* 'env' index or 0 if no 'env' */
+        int status = luaL_loadfilex(L, fname, mode);
+        return load_aux(L, status, env);
+    }
+
 #pragma warning disable IDE1006 // 先頭 _ を許容
+    private static int _dofile(lua_State L) {
+        int nargs = lua_gettop(L);
+        if (nargs == 0) return L.PushResult("filename is required");
+        var filename = lua_tostring(L, 1);
+        if (filename == null) return L.PushResult("filename is not string");
+        // lua/ 下にないファイルは dofile の対象にとれないように
+        if (!IsInLuaDirectory(filename, out var error)) return L.PushResult(error);
+        lua_settop(L, 0);
+        var status = luaL_dofile(L, filename);
+        if (status != 0) return L.PushResult(lua_tostring(L, -1));
+        Console.WriteLine($"dofile: {filename}");
+        return lua_gettop(L);
+    }
+    private static int _loadfile(lua_State L) {
+        int nargs = lua_gettop(L);
+        if (nargs == 0) return L.PushResult("filename is required");
+        var filename = lua_tostring(L, 1);
+        if (filename == null) return L.PushResult("filename is not string");
+        // lua/ 下にないファイルは loadfile の対象にとれないように
+        if (!IsInLuaDirectory(filename, out var error)) return L.PushResult(error);
+        Console.WriteLine($"loadfile: {filename}");
+        return luaB_loadfile(L);
+    }
+
     [UnmanagedCallersOnly]
     private static int _callSend(lua_State L) {
         int nargs = lua_gettop(L);
@@ -52,10 +124,10 @@ class LuaEngine {
 
         int type_ = lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
         lua_pushstring(L, "dofile");
-        lua_pushnil(L);
+        lua_pushcfunction(L, static (L) => _dofile(L));
         lua_rawset(L, -3);
         lua_pushstring(L, "loadfile");
-        lua_pushnil(L);
+        lua_pushcfunction(L, static (L) => _loadfile(L));
         lua_rawset(L, -3);
         lua_pop(L, 1); // pop global
 
@@ -113,7 +185,7 @@ class LuaEngine {
         L = luaL_newstate();
         OpenLibs(L);
 
-        var mainLua = File.ReadAllText("lua/main.lua");
+        var mainLua = File.ReadAllText("main.lua");
 
         var load = new LuaCoroutine(L);
         Coroutines.Add(T = load.L, load);

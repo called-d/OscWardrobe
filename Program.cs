@@ -4,6 +4,7 @@ if (args.Contains("--overwrite-all-lua")) {
     Directory.Delete("lua", true);
 }
 FormApplication.ExtractLua();
+Environment.CurrentDirectory = Path.Combine(Environment.CurrentDirectory, "lua");
 
 var osc = new OscQueryServiceServiceAndClient();
 LuaEngine.OnSendFunctionCalled += osc.WrappedSend;
