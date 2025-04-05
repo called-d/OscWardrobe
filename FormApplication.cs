@@ -13,9 +13,9 @@ class FormApplication {
     public static bool ExtractLua(string workDir, bool force = false) {
         var dirName = "lua";
         if (force) {
-            var i = 0;
+            var i = 1;
             while (Directory.Exists(Path.Combine(workDir, dirName))) {
-                dirName = $"lua.{i++}";
+                dirName = $"lua ({i++})";
             }
         } else {
             if (Directory.Exists(Path.Combine(workDir, dirName))) return false;
