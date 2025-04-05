@@ -1,0 +1,9 @@
+{
+    "Lua.diagnostics.globals": [
+        "ready",
+        "main",
+        "sleep",
+        "receive",
+        "osc"
+    ]
+}
