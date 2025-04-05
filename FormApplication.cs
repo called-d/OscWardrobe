@@ -10,19 +10,19 @@ class FormApplication {
         return assembly.GetManifestResourceStream(name_) ?? throw new Exception($"Resource {name_} not found");
     }
 
-    public static bool ExtractLua(bool force = false) {
+    public static bool ExtractLua(string workDir, bool force = false) {
         var dirName = "lua";
         if (force) {
             var i = 0;
-            while (Directory.Exists(dirName)) {
+            while (Directory.Exists(Path.Combine(workDir, dirName))) {
                 dirName = $"lua.{i++}";
             }
         } else {
-            if (Directory.Exists("lua")) return false;
+            if (Directory.Exists(Path.Combine(workDir, dirName))) return false;
         }
         System.IO.Compression.ZipFile.ExtractToDirectory(
             GetStream("Lua.zip"),
-            dirName
+            Path.Combine(workDir, dirName)
         );
         return true;
     }
