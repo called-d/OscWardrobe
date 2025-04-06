@@ -20,8 +20,33 @@ class LuaEngine: IDisposable {
     private string? _error = null;
     public string? Error => _error;
     private static readonly IntPtr LuaSideCoroutinesRefTableRegistryKeyUserDataPointer = Marshal.AllocHGlobal(sizeof(int));
+    private static readonly IntPtr ReadonlyPackageLibraryUserDataPointer = Marshal.AllocHGlobal(sizeof(int));
     private static readonly Dictionary<lua_State, LuaCoroutine> Coroutines = [];
     public static Func<string, object?[], string?> OnSendFunctionCalled = (_, _) => null;
+
+    private static bool _allowLoadlib = false;
+    private static bool _allowRequireDll = false;
+    private static bool _openDebugLib = false;
+    private static bool _unjailIO = false;
+
+    public static void ParseArgs(string[] args) {
+        foreach (var arg in args) {
+            switch (arg) {
+                case "--lua-allow-loadlib":
+                    _allowLoadlib = true;
+                    break;
+                case "--lua-allow-require-dll":
+                    _allowRequireDll = true;
+                    break;
+                case "--lua-unjail-io":
+                    _unjailIO = true;
+                    break;
+                case "--lua-allow-debug":
+                    _openDebugLib = true;
+                    break;
+            }
+        }
+    }
 
     public static string LuaFileTopDirectory => Environment.CurrentDirectory;
     public static bool IsInLuaDirectory(string path, out string? error) {
@@ -137,8 +162,65 @@ class LuaEngine: IDisposable {
         lua_rawset(L, -3);
         lua_pop(L, 1); // pop global
 
+        // readonly package library
+        luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+        lua_pushstring(L, LOADLIBNAME);
+        lua_pushlightuserdata(L, (nuint)ReadonlyPackageLibraryUserDataPointer); // package library object
+        lua_newtable(L); // metatable
+        lua_pushstring(L, "__metatable");
+        lua_pushstring(L, "readonly");
+        lua_rawset(L, -3); // set __metatable = "readonly"
+        lua_pushstring(L, "__newindex");
+        lua_pushcfunction(L, static (L) => {
+            Console.WriteLine("package library is readonly");
+            return 0;
+        });
+        lua_rawset(L, -3); // set __newindex = function() return nil, errmsg end
+        lua_pushstring(L, "__index");
+        // #### package library start
         // luaopen_package パッケージライブラリ
-        // luaL_requiref(L, LOADLIBNAME, luaopen_package, 1); lua_pop(L, 1);
+        luaL_requiref(L, LOADLIBNAME, luaopen_package, 1);
+
+        lua_pushstring(L, "path");
+        lua_pushstring(L, "./?.lua;./?.lc;./?/init.lua;./lib/?.lua;./lib/?.lc;./lib/?/init.lua");
+        lua_rawset(L, -3); // set package.path
+        lua_pushstring(L, "cpath");
+        lua_pushstring(L, _allowRequireDll ? "../?.dll" : "");
+        lua_rawset(L, -3); // set package.cpath
+        if (!_allowLoadlib) {
+            lua_pushstring(L, "loadlib");
+            lua_pushcfunction(L, static (L) => {
+                return L.PushResult("package.loadlib() is not allowed");
+            });
+            lua_rawset(L, -3); // set package.loadlib
+        }
+        if (!_unjailIO) {
+            // package.searchpath() は任意のファイルが存在するか（読み込みモードで開くことができるか）を知るために使えるので塞ぐ
+            lua_pushstring(L, "searchpath");
+            lua_pushcfunction(L, static (L) => {
+                return L.PushResult("package.searchpath() is not allowed");
+            });
+            lua_rawset(L, -3); // set package.searchpath
+        }
+        // #### package library end
+        lua_pushcclosure(L, static (L) => {
+            if (lua_gettop(L) != 2) { lua_pushnil(L); return 1; }
+            var key = lua_tostring(L, 2);
+            if (key == null) { lua_pushnil(L); return 1; }
+            lua_rawget(L, lua_upvalueindex(1));
+            return 1;
+        }, 1);
+        lua_rawset(L, -3); // __index = function(_, k) return package[k] end
+        lua_setmetatable(L, -2); // set metatable
+        lua_rawset(L, -3); // package.loaded['package'] = readonly_package
+        lua_pushstring(L, LOADLIBNAME);
+        lua_rawget(L, -2);
+        lua_pushvalue(L, -1); // package.loaded['package'] for next
+        lua_setglobal(L, LOADLIBNAME); // set _G['package'] = package.loaded['package']
+        lua_getglobal(L, "require");
+        lua_insert(L, -2);
+        lua_setupvalue(L, -2, 1); // set upvalue 1 of require = package.require
+        lua_pop(L, 1); // pop package.loaded
 
         // coroutine コルーチンライブラリ
         luaL_requiref(L, LUA_COLIBNAME, luaopen_coroutine, 1); lua_pop(L, 1);
@@ -158,7 +240,9 @@ class LuaEngine: IDisposable {
         luaL_requiref(L, LUA_UTF8LIBNAME, luaopen_utf8, 1); lua_pop(L, 1);
 
         // debug: デバッグライブラリ
-        // luaL_requiref(L, DBLIBNAME, luaopen_debug, 1); lua_pop(L, 1);
+        if (_openDebugLib) {
+            luaL_requiref(L, DBLIBNAME, luaopen_debug, 1); lua_pop(L, 1);
+        }
 
         // osc
         luaL_newlib(L, [

@@ -7,6 +7,8 @@ var workDir = Environment.CurrentDirectory;
 FormApplication.ExtractLuaIfNeeded(workDir);
 Environment.CurrentDirectory = Path.Combine(workDir, "lua");
 
+LuaEngine.ParseArgs(args);
+
 var osc = new OscQueryServiceServiceAndClient();
 LuaEngine.OnSendFunctionCalled += osc.WrappedSend;
 var luaEngine = new LuaEngine();
