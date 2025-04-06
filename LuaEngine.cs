@@ -217,10 +217,31 @@ class LuaEngine: IDisposable {
         lua_rawget(L, -2);
         lua_pushvalue(L, -1); // package.loaded['package'] for next
         lua_setglobal(L, LOADLIBNAME); // set _G['package'] = package.loaded['package']
+        // set upvalue
         lua_getglobal(L, "require");
         lua_insert(L, -2);
-        lua_setupvalue(L, -2, 1); // set upvalue 1 of require = package.require
-        lua_pop(L, 1); // pop package.loaded
+        lua_setupvalue(L, -2, 1); // set upvalue 1 of require **as** package
+        lua_getglobal(L, LOADLIBNAME);
+        lua_getfield(L, -1, "searchers"); // package.searchers
+        lua_remove(L, -2);
+        lua_geti(L, -1, 1); // package.searchers[1]
+        lua_getglobal(L, LOADLIBNAME);
+        lua_setupvalue(L, -2, 1); // set upvalue 1 of package.searchers[1] **as** package
+        lua_pop(L, 1); // pop package.searchers[1]
+        lua_geti(L, -1, 2); // package.searchers[2]
+        lua_getglobal(L, LOADLIBNAME);
+        lua_setupvalue(L, -2, 1);
+        lua_pop(L, 1);
+        lua_geti(L, -1, 3); // package.searchers[3]
+        lua_getglobal(L, LOADLIBNAME);
+        lua_setupvalue(L, -2, 1);
+        lua_pop(L, 1);
+        lua_geti(L, -1, 4); // package.searchers[4]
+        lua_getglobal(L, LOADLIBNAME);
+        lua_setupvalue(L, -2, 1);
+        lua_pop(L, 1); // pop package.searchers[4]
+
+        lua_pop(L, 2); // pop package.searchers package.loaded
 
         // coroutine コルーチンライブラリ
         luaL_requiref(L, LUA_COLIBNAME, luaopen_coroutine, 1); lua_pop(L, 1);
