@@ -78,8 +78,7 @@ class LuaEngine: IDisposable {
         error ??= $"{path} is not in lua directory";
         return result;
     }
-    // NOTE: io を許可するディレクトリ、 lua/ 下でいいのか
-    public static string IODirectory => LuaFileTopDirectory;
+    public static string IODirectory => Path.Combine(LuaFileTopDirectory, "io_dir");
 
     private static bool isInIODirectory(string path, out string? error) {
         var result = IsInDirectory(IODirectory, path, out error);
