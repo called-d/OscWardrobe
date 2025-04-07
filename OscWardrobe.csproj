@@ -12,6 +12,8 @@
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <Version>0.1.0</Version>
+    <Copyright>Copyright © 2025 called_D, MIT license</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
