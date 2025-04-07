@@ -28,6 +28,7 @@ class LuaEngine: IDisposable {
     private static bool _allowRequireDll = false;
     private static bool _openDebugLib = false;
     private static bool _unjailIO = false;
+    private static bool _processExecute = false;
 
     public static void ParseArgs(string[] args) {
         foreach (var arg in args) {
@@ -40,6 +41,9 @@ class LuaEngine: IDisposable {
                     break;
                 case "--lua-unjail-io":
                     _unjailIO = true;
+                    break;
+                case "--lua-process-execute":
+                    _processExecute = true;
                     break;
                 case "--lua-allow-debug":
                     _openDebugLib = true;
@@ -250,8 +254,17 @@ class LuaEngine: IDisposable {
 
         // io: 入出力ライブラリ
         // luaL_requiref(L, IOLIBNAME, luaopen_io, 1); lua_pop(L, 1);
+
+        if (!_processExecute) {
+            // TODO: io.popen() を塞ぐ
+        }
+
         // os: OSライブラリ
         // luaL_requiref(L, OSLIBNAME, luaopen_os, 1); lua_pop(L, 1);
+
+        if (!_processExecute) {
+            // TODO: os.execute() を塞ぐ
+        }
 
         // string: 文字列ライブラリ
         luaL_requiref(L, LUA_STRLIBNAME, luaopen_string, 1); lua_pop(L, 1);
