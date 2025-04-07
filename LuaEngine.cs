@@ -52,10 +52,9 @@ class LuaEngine: IDisposable {
         }
     }
 
-    public static string LuaFileTopDirectory => Environment.CurrentDirectory;
-    public static bool IsInLuaDirectory(string path, out string? error) {
-        var luaRoot = LuaFileTopDirectory;
-        var fullPath = Path.GetFullPath(path, luaRoot);
+    // rootDir は完全修飾パスでないといけない
+    private static bool IsInDirectory(string rootDir, string path, out string? error) {
+        var fullPath = Path.GetFullPath(path, rootDir);
         DirectoryInfo? d = File.Exists(fullPath)
             ? new FileInfo(fullPath).Directory
             : Directory.GetParent(fullPath);
@@ -64,14 +63,28 @@ class LuaEngine: IDisposable {
             return false;
         }
         while (d != null) {
-            if (d.FullName == luaRoot) {
+            if (d.FullName == rootDir) {
                 error = null;
                 return true;
             }
             d = d.Parent;
         }
-        error = $"{path} is not in lua directory";
+        error = null;
         return false;
+    }
+    public static string LuaFileTopDirectory => Environment.CurrentDirectory;
+    public static bool IsInLuaDirectory(string path, out string? error) {
+        var result = IsInDirectory(LuaFileTopDirectory, path, out error);
+        error ??= $"{path} is not in lua directory";
+        return result;
+    }
+    // NOTE: io を許可するディレクトリ、 lua/ 下でいいのか
+    public static string IODirectory => LuaFileTopDirectory;
+
+    private static bool isInIODirectory(string path, out string? error) {
+        var result = IsInDirectory(IODirectory, path, out error);
+        error ??= $"io operation is not allowed. not in io directory";
+        return result;
     }
 
 #pragma warning disable IDE1006 // 先頭 _ や snake_case を許容
@@ -108,6 +121,7 @@ class LuaEngine: IDisposable {
 
     private static int _dofile(lua_State L) {
         int nargs = lua_gettop(L);
+        // NOTE: stdin の内容を実行する機能は後でどうするか考える
         if (nargs == 0) return L.PushResult("filename is required");
         var filename = lua_tostring(L, 1);
         if (filename == null) return L.PushResult("filename is not string");
@@ -121,6 +135,7 @@ class LuaEngine: IDisposable {
     }
     private static int _loadfile(lua_State L) {
         int nargs = lua_gettop(L);
+        // NOTE: stdin の内容を実行する機能は後でどうするか考える
         if (nargs == 0) return L.PushResult("filename is required");
         var filename = lua_tostring(L, 1);
         if (filename == null) return L.PushResult("filename is not string");
@@ -128,6 +143,17 @@ class LuaEngine: IDisposable {
         if (!IsInLuaDirectory(filename, out var error)) return L.PushResult(error);
         Console.WriteLine($"loadfile: {filename}");
         return luaB_loadfile(L);
+    }
+    private static int _wrappedIOFunctionCall(lua_State L) {
+        var nargs = lua_gettop(L);
+        if (nargs >= 1 && lua_isstring(L, 1) == 1) {
+            var file = luaL_checkstring(L, 1);
+            if (file != null && !isInIODirectory(file, out var error)) return L.PushResult(error);
+        }
+        lua_pushvalue(L, lua_upvalueindex(1));
+        lua_insert(L, 1); // 上位値から取り出した io.input 等をスタックの底に送り込む
+        lua_call(L, nargs, LUA_MULTRET);
+        return lua_gettop(L);
     }
 
     [UnmanagedCallersOnly]
@@ -253,11 +279,28 @@ class LuaEngine: IDisposable {
         luaL_requiref(L, LUA_TABLIBNAME, luaopen_table, 1); lua_pop(L, 1);
 
         // io: 入出力ライブラリ
-        // luaL_requiref(L, IOLIBNAME, luaopen_io, 1); lua_pop(L, 1);
+        luaL_requiref(L, IOLIBNAME, luaopen_io, 1);
+        lua_getfield(L, -1, "input");
+        lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+        lua_setfield(L, -2, "input");
+        lua_getfield(L, -1, "lines");
+        lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+        lua_setfield(L, -2, "lines");
+        lua_getfield(L, -1, "open");
+        lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+        lua_setfield(L, -2, "open");
+        lua_getfield(L, -1, "output");
+        lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+        lua_setfield(L, -2, "output");
 
         if (!_processExecute) {
-            // TODO: io.popen() を塞ぐ
+            // io.popen() を塞ぐ
+            lua_pushcfunction(L, static (L) => {
+                return L.PushResult("io.popen() is not allowed");
+            });
+            lua_setfield(L, -2, "popen");
         }
+        lua_pop(L, 1); // pop io library
 
         // os: OSライブラリ
         // luaL_requiref(L, OSLIBNAME, luaopen_os, 1); lua_pop(L, 1);
