@@ -1,8 +1,12 @@
 
+using System.Text.Json.Nodes;
+
 class FormApplication {
     readonly Thread applicationThread;
     readonly Icon icon;
     NotifyIcon? nofifyIcon;
+    public Action OnInit = () => { };
+    ToolStripMenuItem? luaMenu;
 
     private static Stream GetStream(string name) {
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
@@ -40,7 +44,9 @@ class FormApplication {
                 ContextMenuStrip = CreateContextMenu(),
             };
             nofifyIcon.MouseClick += (_sender, _e) => nofifyIcon.ContextMenuStrip.Show(Cursor.Position);
+            var _ptr = nofifyIcon.ContextMenuStrip.Handle;
 
+            OnInit();
             Application.Run();
         });
         Application.SetHighDpiMode(HighDpiMode.SystemAware);
@@ -107,7 +113,7 @@ class FormApplication {
 
     public ContextMenuStrip CreateContextMenu() {
         var menu = new ContextMenuStrip();
-        menu.Items.Add(CreateLuaMenu());
+        menu.Items.Add(luaMenu = CreateLuaMenu());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem(
             "Show License", null, (_s, _e) => ShowLicenseWindow(), "Show License"
@@ -118,12 +124,66 @@ class FormApplication {
         ));
         return menu;
     }
-    private ToolStripMenuItem CreateLuaMenu() {
+    private static ToolStripMenuItem CreateLuaMenu() {
         var menu = new ToolStripMenuItem("Lua");
         menu.DropDownItems.Add(new ToolStripMenuItem(
             "Extract Default Lua Files", null, (_s, _e) => ThreadEvents.ExtactLua.Set(), "Extract Default Lua Files"
         ));
         return menu;
+    }
+    public object[]? ClickedMenu = null;
+    private void AddLuaMenuItem(ToolStripMenuItem menu, JsonNode? menuJson, object[] path) {
+        switch (menuJson) {
+            case JsonObject menuObj: {
+                if (menuObj.TryGetPropertyValue("name", out var name)) {
+                    var disabled = menuObj.TryGetPropertyValue("disabled", out var d) && d?.GetValue<bool>() == true;
+                    var items = menuObj.TryGetPropertyValue("items", out var itemsNode) ? itemsNode as JsonArray : null;
+                    var item = new ToolStripMenuItem(name!.ToString(), null, null, name.ToString()) {
+                            Enabled = !disabled,
+                        };
+                    if (items != null) {
+                        AddLuaMenuItem(item, items, [..path, name.ToString()]);
+                    } else {
+                        item.Click += (_s, _e) => {
+                            ClickedMenu = [menuObj.GetPropertyName(), name.ToString()];
+                            ThreadEvents.LuaMenu.Set();
+                        };
+                    }
+                    menu.DropDownItems.Add(item);
+                }
+                break;
+            }
+            case JsonArray menuArr: {
+                foreach (var item in menuArr.AsEnumerable()) AddLuaMenuItem(menu, item, [..path]);
+                break;
+            }
+            case JsonValue jsonValue: {
+                var name = jsonValue.ToString();
+                if (name == "--separator--") {
+                    menu.DropDownItems.Add(new ToolStripSeparator());
+                    break;
+                }
+                var item = new ToolStripMenuItem(name, null, (_s, _e) => {
+                    ClickedMenu = [..path, name];
+                    ThreadEvents.LuaMenu.Set();
+                }, name) {
+                    Enabled = true,
+                };
+                menu.DropDownItems.Add(item);
+                break;
+            }
+        }
+    }
+    public void UpdateLuaMenu(JsonNode menuJson) {
+        if (luaMenu == null) return;
+        nofifyIcon?.ContextMenuStrip?.Invoke(() => {
+            luaMenu.DropDownItems.Clear();
+            AddLuaMenuItem(luaMenu, menuJson, []);
+            luaMenu.DropDownItems.Add(new ToolStripSeparator());
+            luaMenu.DropDownItems.Add(new ToolStripMenuItem(
+                "Extract Default Lua Files", null, (_s, _e) => ThreadEvents.ExtactLua.Set(), "Extract Default Lua Files"
+            ));
+        });
     }
 
     public void Start() {

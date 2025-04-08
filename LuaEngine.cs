@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text.Json.Nodes;
 using LuaNET.Lua54;
 using static LuaNET.Lua54.Lua;
 
@@ -23,6 +24,7 @@ class LuaEngine: IDisposable {
     private static readonly IntPtr ReadonlyPackageLibraryUserDataPointer = Marshal.AllocHGlobal(sizeof(int));
     private static readonly Dictionary<lua_State, LuaCoroutine> Coroutines = [];
     public static Func<string, object?[], string?> OnSendFunctionCalled = (_, _) => null;
+    public static Action<JsonNode> OnContextMenuUpdateCalled = (_) => {};
 
     private static bool _allowLoadlib = false;
     private static bool _allowRequireDll = false;
@@ -175,6 +177,40 @@ class LuaEngine: IDisposable {
             _ => null,
         };
         return L.PushResult(OnSendFunctionCalled(address, args));
+    }
+    [UnmanagedCallersOnly]
+    private static int _callContextMenuUpdate(lua_State L) {
+        int nargs = lua_gettop(L);
+        if (luaL_loadfile(L, "config/context_menu.lua") == LUA_ERRFILE) {
+            Console.WriteLine($"config/context_menu.lua cannot load.");
+            return 0;
+        };
+        lua_insert(L, 1); // スタックの底にロードしたチャンク context_menu.lua を送り込む
+        if (lua_pcall(L, nargs, 1, 0) == LUA_OK) {
+            var nres = lua_gettop(L);
+            if (nres == 0) return L.PushResult("config/context_menu.lua returns no result.");
+            var node = Bindings.LuaObjectToJsonNode(L, -1);
+            if (node != null) OnContextMenuUpdateCalled(node);
+            return nres;
+        }
+        return 0;
+    }
+
+    private static int _onContextMenuClickedImpl(lua_State L) {
+        var nargs = lua_gettop(L);
+        lua_getglobal(L, "menu");
+        lua_getfield(L, -1, "onclick");
+        lua_remove(L, -2); // remove menu
+        switch (lua_type(L, -1)) {
+            case LUA_TFUNCTION:
+                lua_insert(L, 1);
+                lua_call(L, nargs, 0);
+                break;
+            default:
+                Console.WriteLine("menu.onclick is not a function");
+                break;
+        }
+        return 0;
     }
 #pragma warning restore IDE1006
 
@@ -343,6 +379,29 @@ class LuaEngine: IDisposable {
         });
         lua_setglobal(L, "sleep");
 
+        // menu
+        luaL_newlib(L, [
+            // menu.update() は config/context_menu.lua を実行して、タスクトレイのメニューに反映する
+            AsLuaLReg("update", &_callContextMenuUpdate),
+#pragma warning disable CS8625 // AsLuaReg の第一引数が null になってもよい
+            AsLuaLReg(null, null)
+#pragma warning restore CS8625
+        ]);
+        // menu.onclick はメニューの項目クリックで発火するイベントハンドラ
+        // menu.onclick のデフォルト実装は print して終了だけする
+        lua_pushcfunction(L, static (L) => {
+            var nargs = lua_gettop(L);
+            lua_pushstring(L, "menu.onclick( ");
+            lua_insert(L, 1);
+            lua_pushstring(L, " ) called.");
+            lua_getglobal(L, "print");
+            lua_insert(L, 1);
+            lua_call(L, nargs + 2, 0);
+            return 0;
+        });
+        lua_setfield(L, -2, "onclick");
+        lua_setglobal(L, "menu");
+
         // 削除した関数をメモリ上から追い出す（気休め）
         lua_gc(L, LUA_GCCOLLECT, 0);
     }
@@ -383,6 +442,16 @@ class LuaEngine: IDisposable {
         c.Resume(args);
         RemoveEndCoroutines();
     }
+    public void DoString(string lua, params object?[] args) {
+        if (lua_checkstack(T, 100) == 0) {
+            // スタックに余裕がない
+            Console.WriteLine("stack size is not enough");
+        }
+        var c = new LuaCoroutine(T);
+        luaL_loadstring(c.L, lua);
+        c.Resume(args);
+        RemoveEndCoroutines();
+    }
     public void Update() {
         foreach (var c in Coroutines.Values.ToList()) {
             if (c.IsSleeping && c.sleepUntil < DateTime.Now) {
@@ -390,6 +459,12 @@ class LuaEngine: IDisposable {
             }
             if (!c.IsSleeping) c.Resume();
         }
+        RemoveEndCoroutines();
+    }
+    public void OnContextMenuClicked(object[] key) {
+        var c = new LuaCoroutine(T);
+        lua_pushcfunction(c.L, static (L) => _onContextMenuClickedImpl(L));
+        c.Resume(key);
         RemoveEndCoroutines();
     }
 

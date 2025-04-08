@@ -43,7 +43,9 @@ Console.CancelKeyPress += (_sender, e) => {
 };
 
 var app = new FormApplication();
+app.OnInit = () => luaEngine.DoString("menu.update('startup')");
 app.Start();
+LuaEngine.OnContextMenuUpdateCalled += app.UpdateLuaMenu;
 
 while (running) {
     switch (WaitHandle.WaitAny(ThreadEvent.events, 100)) {
@@ -52,6 +54,12 @@ while (running) {
             break;
         case (int)ThreadEvents.ExtactLua:
             FormApplication.ExtractLuaForce(workDir);
+            break;
+        case (int)ThreadEvents.LuaMenu:
+            if (app.ClickedMenu != null) {
+                luaEngine.OnContextMenuClicked(app.ClickedMenu);
+                app.ClickedMenu = null;
+            }
             break;
     }
     luaEngine.Update();
