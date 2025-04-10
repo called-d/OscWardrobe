@@ -156,6 +156,21 @@ class LuaEngine: IDisposable {
         lua_call(L, nargs, LUA_MULTRET);
         return lua_gettop(L);
     }
+    private static int _wrappedIOFunctionCall2(lua_State L) {
+        var nargs = lua_gettop(L);
+        if (nargs >= 1 && lua_isstring(L, 1) == 1) {
+            var file = luaL_checkstring(L, 1);
+            if (file != null && !isInIODirectory(file, out var error)) return L.PushResult(error);
+        }
+        if (nargs >= 2 && lua_isstring(L, 2) == 1) {
+            var file = luaL_checkstring(L, 2);
+            if (file != null && !isInIODirectory(file, out var error)) return L.PushResult(error);
+        }
+        lua_pushvalue(L, lua_upvalueindex(1));
+        lua_insert(L, 1); // 上位値から取り出した io.input 等をスタックの底に送り込む
+        lua_call(L, nargs, LUA_MULTRET);
+        return lua_gettop(L);
+    }
 
     [UnmanagedCallersOnly]
     private static int _callSend(lua_State L) {
@@ -315,18 +330,20 @@ class LuaEngine: IDisposable {
 
         // io: 入出力ライブラリ
         luaL_requiref(L, IOLIBNAME, luaopen_io, 1);
-        lua_getfield(L, -1, "input");
-        lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
-        lua_setfield(L, -2, "input");
-        lua_getfield(L, -1, "lines");
-        lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
-        lua_setfield(L, -2, "lines");
-        lua_getfield(L, -1, "open");
-        lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
-        lua_setfield(L, -2, "open");
-        lua_getfield(L, -1, "output");
-        lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
-        lua_setfield(L, -2, "output");
+        if (!_unjailIO) {
+            lua_getfield(L, -1, "input");
+            lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+            lua_setfield(L, -2, "input");
+            lua_getfield(L, -1, "lines");
+            lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+            lua_setfield(L, -2, "lines");
+            lua_getfield(L, -1, "open");
+            lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+            lua_setfield(L, -2, "open");
+            lua_getfield(L, -1, "output");
+            lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+            lua_setfield(L, -2, "output");
+        }
 
         if (!_processExecute) {
             // io.popen() を塞ぐ
@@ -338,11 +355,24 @@ class LuaEngine: IDisposable {
         lua_pop(L, 1); // pop io library
 
         // os: OSライブラリ
-        // luaL_requiref(L, OSLIBNAME, luaopen_os, 1); lua_pop(L, 1);
-
+        luaL_requiref(L, OSLIBNAME, luaopen_os, 1);
         if (!_processExecute) {
-            // TODO: os.execute() を塞ぐ
+            // os.execute() を塞ぐ
+            lua_pushcfunction(L, static (L) => {
+                return L.PushResult("os.execute() is not allowed");
+            });
+            lua_setfield(L, -2, "execute");
         }
+        // os.exit() 塞いでもいいけどまあ process 止められるだけなので別にいいか
+        if (!_unjailIO) {
+            lua_getfield(L, -1, "remove");
+            lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall(L), 1);
+            lua_setfield(L, -2, "remove");
+            lua_getfield(L, -1, "rename");
+            lua_pushcclosure(L, static (L) => _wrappedIOFunctionCall2(L), 1);
+            lua_setfield(L, -2, "rename");
+        }
+        lua_pop(L, 1);
 
         // string: 文字列ライブラリ
         luaL_requiref(L, LUA_STRLIBNAME, luaopen_string, 1); lua_pop(L, 1);
