@@ -23,6 +23,7 @@ class LuaEngine: IDisposable {
     private static readonly IntPtr LuaSideCoroutinesRefTableRegistryKeyUserDataPointer = Marshal.AllocHGlobal(sizeof(int));
     private static readonly IntPtr ReadonlyPackageLibraryUserDataPointer = Marshal.AllocHGlobal(sizeof(int));
     private static readonly Dictionary<lua_State, LuaCoroutine> Coroutines = [];
+    private static readonly HashSet<string> JsonIODirectories = [];
     public static Func<string, object?[], string?> OnSendFunctionCalled = (_, _) => null;
     public static Action<JsonNode> OnContextMenuUpdateCalled = (_) => {};
 
@@ -52,6 +53,19 @@ class LuaEngine: IDisposable {
                     break;
             }
         }
+    }
+
+    private static string? ResolveDirectoryFullPath(string rootDir, string path) {
+        string fullPath = path switch {
+            "~" => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            _ when path.StartsWith("~/") || path.StartsWith("~\\") =>
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path.Substring(2)),
+            _ => Path.GetFullPath(path, rootDir)
+        };
+        DirectoryInfo? d = File.Exists(fullPath)
+            ? new FileInfo(fullPath).Directory
+            : Directory.GetParent(fullPath);
+        return d?.FullName;
     }
 
     // rootDir は完全修飾パスでないといけない
@@ -85,6 +99,14 @@ class LuaEngine: IDisposable {
     private static bool isInIODirectory(string path, out string? error) {
         var result = IsInDirectory(IODirectory, path, out error);
         error ??= $"io operation is not allowed. not in io directory";
+        return result;
+    }
+
+    public static bool IsInJsonIODirectory(string path, out string? error) {
+        error = null;
+        var result = JsonIODirectories.Any(dir => IsInDirectory(dir, path, out string? error));
+        error ??= $"io operation is not allowed. not in json io directory";
+        if (result) error = null;
         return result;
     }
 
@@ -224,6 +246,48 @@ class LuaEngine: IDisposable {
             default:
                 Console.WriteLine("menu.onclick is not a function");
                 break;
+        }
+        return 0;
+    }
+
+    private static int _loadConfig(lua_State L) {
+        if (luaL_loadfile(L, "config/init.lua") == LUA_ERRFILE) {
+            Console.WriteLine($"config/init.lua cannot load.");
+            return 0;
+        };
+        lua_insert(L, 1);
+        if (lua_pcall(L, 0, 1, 0) == LUA_OK) {
+            var nres = lua_gettop(L);
+            if (nres == 0) return L.PushResult("config/init.lua returns no result.");
+            var node = Bindings.LuaObjectToJsonNode(L, -1);
+            if (node != null) _UpdateConfig(node);
+            return nres;
+        }
+        return 0;
+    }
+
+    private static int _UpdateConfig(JsonNode node) {
+        if (node["json_io_dir"] != null) {
+            JsonIODirectories.Clear();
+            var directories = node["json_io_dir"];
+            switch (directories) {
+                case JsonArray array:
+                    foreach (var dir in array) {
+                        if (!(dir is JsonValue value)) continue;
+                        var path = ResolveDirectoryFullPath(LuaFileTopDirectory, value.ToString());
+                        if (path == null) continue;
+                        JsonIODirectories.Add(path);
+                    }
+                    break;
+                case JsonValue value: {
+                    var path = ResolveDirectoryFullPath(LuaFileTopDirectory, value.ToString());
+                    if (path != null) JsonIODirectories.Add(path);
+                    break;
+                }
+                default:
+                    Console.WriteLine("json_io_dir is not array or string");
+                    break;
+            }
         }
         return 0;
     }
@@ -498,6 +562,12 @@ class LuaEngine: IDisposable {
         RemoveEndCoroutines();
     }
 
+    public void LoadConfig() {
+        var c = new LuaCoroutine(T);
+        lua_pushcfunction(c.L, static (L) => _loadConfig(L));
+        c.Resume();
+        RemoveEndCoroutines();
+    }
     public void Dispose() {
         lua_close(L);
     }

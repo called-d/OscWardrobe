@@ -43,7 +43,10 @@ Console.CancelKeyPress += (_sender, e) => {
 };
 
 var app = new FormApplication();
-app.OnInit = () => luaEngine.DoString("menu.update('startup')");
+app.OnInit = () => {
+    luaEngine.LoadConfig();
+    luaEngine.DoString("menu.update('startup')");
+};
 app.Start();
 LuaEngine.OnContextMenuUpdateCalled += app.UpdateLuaMenu;
 
