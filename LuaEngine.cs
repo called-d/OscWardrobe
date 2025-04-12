@@ -574,6 +574,7 @@ class LuaEngine: IDisposable {
 
 #region Coroutine
     private class LuaCoroutine: IDisposable {
+        private static lua_State stateNull;
         public lua_State L;
         private lua_State _upL;
         private readonly int _ref;
@@ -605,6 +606,7 @@ class LuaEngine: IDisposable {
             if (!(_s == LUA_YIELD || _s == LUA_OK)) {
                 Console.WriteLine("invalid status:");
                 printState(_s);
+                lua_closethread(L, stateNull);
                 IsEnd = true;
                 return 0;
             }
@@ -614,6 +616,7 @@ class LuaEngine: IDisposable {
             printState(s);
             if (s == LUA_ERRRUN) {
                 Console.WriteLine(lua_tostring(L, -1));
+                lua_closethread(L, stateNull);
                 IsEnd = true;
                 return s;
             }
@@ -622,6 +625,7 @@ class LuaEngine: IDisposable {
                     Console.WriteLine(lua_tostring(L, -1));
                     lua_pop(L, 1);
                 }
+                lua_closethread(L, stateNull);
                 IsEnd = true;
                 return s;
             }
