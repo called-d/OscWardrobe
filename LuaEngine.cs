@@ -365,6 +365,7 @@ class LuaEngine: IDisposable {
         lua_getglobal(L, "require");
         lua_insert(L, -2);
         lua_setupvalue(L, -2, 1); // set upvalue 1 of require **as** package
+        lua_setglobal(L, "require"); // set _G['require'] = require
         lua_getglobal(L, LOADLIBNAME);
         lua_getfield(L, -1, "searchers"); // package.searchers
         lua_remove(L, -2);
