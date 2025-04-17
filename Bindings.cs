@@ -69,13 +69,14 @@ public static class Bindings {
                     return arr;
                 } else {
                     var table = new JsonObject();
+                    var idx_ = lua_absindex(L, idx);
                     lua_pushnil(L);
-                    while (lua_next(L, -2) != 0) {
-                        string? key = lua_type(L, -2) switch
+                    while (lua_next(L, idx_) != 0) {
+                        string? key = lua_type(L, idx_) switch
                         {
-                            LUA_TSTRING => lua_tostring(L, -2),
-                            LUA_TNUMBER => lua_tonumber(L, -2).ToString(),
-                            LUA_TBOOLEAN => lua_toboolean(L, -2) != 0 ? "true" : "false",
+                            LUA_TSTRING => lua_tostring(L, idx_),
+                            LUA_TNUMBER => lua_tonumber(L, idx_).ToString(),
+                            LUA_TBOOLEAN => lua_toboolean(L, idx_) != 0 ? "true" : "false",
                             _ => null,
                         };
                         var value = LuaObjectToJsonNode(L, -1);
